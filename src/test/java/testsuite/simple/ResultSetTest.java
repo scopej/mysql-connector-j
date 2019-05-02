@@ -1,32 +1,43 @@
 /*
-  Copyright (c) 2005, 2017, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2005, 2018, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite.simple;
 
+import java.io.InputStream;
+import java.io.Reader;
 import java.io.UnsupportedEncodingException;
+import java.sql.Blob;
+import java.sql.Clob;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.JDBCType;
+import java.sql.NClob;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
@@ -45,10 +56,10 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 
-import com.mysql.cj.core.CharsetMapping;
-import com.mysql.cj.core.MysqlType;
-import com.mysql.cj.core.conf.PropertyDefinitions;
-import com.mysql.cj.core.exceptions.MysqlErrorNumbers;
+import com.mysql.cj.CharsetMapping;
+import com.mysql.cj.MysqlType;
+import com.mysql.cj.conf.PropertyKey;
+import com.mysql.cj.exceptions.MysqlErrorNumbers;
 import com.mysql.cj.jdbc.ConnectionImpl;
 import com.mysql.cj.jdbc.exceptions.NotUpdatable;
 
@@ -76,7 +87,7 @@ public class ResultSetTest extends BaseTestCase {
 
         // build map of charsets supported by server
         Connection c = getConnectionWithProps("detectCustomCollations=true");
-        Map<String, Integer> charsetsMap = new HashMap<String, Integer>();
+        Map<String, Integer> charsetsMap = new HashMap<>();
         this.rs = this.stmt.executeQuery("SHOW COLLATION");
         while (this.rs.next()) {
             int index = ((Number) this.rs.getObject(3)).intValue();
@@ -149,7 +160,7 @@ public class ResultSetTest extends BaseTestCase {
 
         try {
             Properties props = new Properties();
-            props.setProperty(PropertyDefinitions.PNAME_padCharsWithSpace, "true");
+            props.setProperty(PropertyKey.padCharsWithSpace.getKeyName(), "true");
 
             paddedConn = getConnectionWithProps(props);
 
@@ -172,29 +183,29 @@ public class ResultSetTest extends BaseTestCase {
             for (int i = 0; i < numCols; i++) {
                 assertEquals(
                         "For column '" + this.rs.getMetaData().getColumnName(i + 1) + "' of collation "
-                                + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterSet(i + 1),
+                                + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterEncoding(i + 1),
                         numChars, this.rs.getString(i + 1).length());
             }
         }
 
-        this.rs = ((com.mysql.cj.api.jdbc.JdbcConnection) paddedConn).clientPrepareStatement(query).executeQuery();
+        this.rs = ((com.mysql.cj.jdbc.JdbcConnection) paddedConn).clientPrepareStatement(query).executeQuery();
 
         while (this.rs.next()) {
             for (int i = 0; i < numCols; i++) {
                 assertEquals(
                         "For column '" + this.rs.getMetaData().getColumnName(i + 1) + "' of collation "
-                                + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterSet(i + 1),
+                                + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterEncoding(i + 1),
                         numChars, this.rs.getString(i + 1).length());
             }
         }
 
-        this.rs = ((com.mysql.cj.api.jdbc.JdbcConnection) paddedConn).serverPrepareStatement(query).executeQuery();
+        this.rs = ((com.mysql.cj.jdbc.JdbcConnection) paddedConn).serverPrepareStatement(query).executeQuery();
 
         while (this.rs.next()) {
             for (int i = 0; i < numCols; i++) {
                 assertEquals(
                         "For column '" + this.rs.getMetaData().getColumnName(i + 1) + "' of collation "
-                                + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterSet(i + 1),
+                                + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterEncoding(i + 1),
                         numChars, this.rs.getString(i + 1).length());
             }
         }
@@ -206,48 +217,48 @@ public class ResultSetTest extends BaseTestCase {
                 if (this.rs.getRow() != 3) {
                     assertTrue(
                             "For column '" + this.rs.getMetaData().getColumnName(i + 1) + "' of collation "
-                                    + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterSet(i + 1),
+                                    + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterEncoding(i + 1),
                             numChars != this.rs.getString(i + 1).length());
                 } else {
                     assertEquals(
                             "For column '" + this.rs.getMetaData().getColumnName(i + 1) + "' of collation "
-                                    + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterSet(i + 1),
+                                    + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterEncoding(i + 1),
                             numChars, this.rs.getString(i + 1).length());
                 }
             }
         }
 
-        this.rs = ((com.mysql.cj.api.jdbc.JdbcConnection) this.conn).clientPrepareStatement(query).executeQuery();
+        this.rs = ((com.mysql.cj.jdbc.JdbcConnection) this.conn).clientPrepareStatement(query).executeQuery();
 
         while (this.rs.next()) {
             for (int i = 0; i < numCols; i++) {
                 if (this.rs.getRow() != 3) {
                     assertTrue(
                             "For column '" + this.rs.getMetaData().getColumnName(i + 1) + "' of collation "
-                                    + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterSet(i + 1),
+                                    + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterEncoding(i + 1),
                             numChars != this.rs.getString(i + 1).length());
                 } else {
                     assertEquals(
                             "For column '" + this.rs.getMetaData().getColumnName(i + 1) + "' of collation "
-                                    + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterSet(i + 1),
+                                    + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterEncoding(i + 1),
                             numChars, this.rs.getString(i + 1).length());
                 }
             }
         }
 
-        this.rs = ((com.mysql.cj.api.jdbc.JdbcConnection) this.conn).serverPrepareStatement(query).executeQuery();
+        this.rs = ((com.mysql.cj.jdbc.JdbcConnection) this.conn).serverPrepareStatement(query).executeQuery();
 
         while (this.rs.next()) {
             for (int i = 0; i < numCols; i++) {
                 if (this.rs.getRow() != 3) {
                     assertTrue(
                             "For column '" + this.rs.getMetaData().getColumnName(i + 1) + "' of collation "
-                                    + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterSet(i + 1),
+                                    + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterEncoding(i + 1),
                             numChars != this.rs.getString(i + 1).length());
                 } else {
                     assertEquals(
                             "For column '" + this.rs.getMetaData().getColumnName(i + 1) + "' of collation "
-                                    + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterSet(i + 1),
+                                    + ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterEncoding(i + 1),
                             numChars, this.rs.getString(i + 1).length());
                 }
             }
@@ -790,6 +801,654 @@ public class ResultSetTest extends BaseTestCase {
             @Override
             public Void call() throws Exception {
                 rsTmp.updateObject("col", new Object(), JDBCType.REF_CURSOR, 32);
+                return null;
+            }
+        });
+    }
+
+    /**
+     * Test exceptions thrown when trying to update a read-only result set.
+     */
+    public void testUpdateForReadOnlyResultSet() throws SQLException {
+        Statement testStmt = this.conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+        this.rs = testStmt.executeQuery("SELECT 'aaa' as f1");
+
+        assertTrue(this.rs.next());
+
+        final ResultSet rsTmp = this.rs;
+        assertThrows(SQLFeatureNotSupportedException.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateArray(1, null);
+                return null;
+            }
+        });
+        assertThrows(SQLFeatureNotSupportedException.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateArray("f1", null);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateAsciiStream(1, null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateAsciiStream("f1", null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateAsciiStream(1, null, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateAsciiStream("f1", null, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateAsciiStream(1, null, 0L);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateAsciiStream("f1", null, 0L);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBigDecimal(1, null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBigDecimal("f1", null);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBinaryStream(1, null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBinaryStream("f1", null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBinaryStream(1, null, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBinaryStream("f1", null, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBinaryStream(1, null, 0L);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBinaryStream("f1", null, 0L);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBlob(1, (Blob) null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBlob("f1", (Blob) null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBlob(1, (InputStream) null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBlob("f1", (InputStream) null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBlob(1, null, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBlob("f1", null, 0);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBoolean(1, false);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBoolean("f1", false);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateByte(1, (byte) 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateByte("f1", (byte) 0);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBytes(1, new byte[] {});
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateBytes("f1", new byte[] {});
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateCharacterStream(1, null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateCharacterStream("f1", null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateCharacterStream(1, null, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateCharacterStream("f1", null, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateCharacterStream(1, null, 0L);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateCharacterStream("f1", null, 0L);
+                return null;
+            }
+        });
+
+        assertThrows(SQLFeatureNotSupportedException.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateClob(1, (Clob) null);
+                return null;
+            }
+        });
+        assertThrows(SQLFeatureNotSupportedException.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateClob("f1", (Clob) null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateClob(1, (Reader) null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateClob("f1", (Reader) null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateClob(1, (Reader) null, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateClob("f1", (Reader) null, 0);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateDate(1, null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateDate("f1", null);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateDouble(1, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateDouble("f1", 0);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateFloat(1, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateFloat("f1", 0);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateInt(1, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateInt("f1", 0);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateLong(1, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateLong("f1", 0);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateNCharacterStream(1, null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateNCharacterStream("f1", null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateNCharacterStream(1, null, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateNCharacterStream("f1", null, 0);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateNClob(1, (NClob) null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateNClob("f1", (NClob) null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateNClob(1, (Reader) null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateNClob("f1", (Reader) null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateNClob(1, (Reader) null, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateNClob("f1", (Reader) null, 0);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateNString(1, null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateNString("f1", null);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateNull(1);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateNull("f1");
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateObject(1, null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateObject("f1", null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateObject(1, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateObject("f1", 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateObject(1, null, MysqlType.BLOB);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateObject("f1", null, MysqlType.BLOB);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateObject(1, null, MysqlType.BLOB, 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateObject("f1", null, MysqlType.BLOB, 0);
+                return null;
+            }
+        });
+
+        assertThrows(SQLFeatureNotSupportedException.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateRef(1, null);
+                return null;
+            }
+        });
+        assertThrows(SQLFeatureNotSupportedException.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateRef("f1", null);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateRow();
+                return null;
+            }
+        });
+
+        assertThrows(SQLFeatureNotSupportedException.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateRowId(1, null);
+                return null;
+            }
+        });
+        assertThrows(SQLFeatureNotSupportedException.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateRowId("f1", null);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateShort(1, (short) 0);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateShort("f1", (short) 0);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateSQLXML(1, null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateSQLXML("f1", null);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateString(1, null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateString("f1", null);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateTime(1, null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateTime("f1", null);
+                return null;
+            }
+        });
+
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateTimestamp(1, null);
+                return null;
+            }
+        });
+        assertThrows(NotUpdatable.class, null, new Callable<Void>() {
+            @Override
+            public Void call() throws Exception {
+                rsTmp.updateTimestamp("f1", null);
                 return null;
             }
         });

@@ -1,24 +1,30 @@
 /*
-  Copyright (c) 2002, 2017, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2002, 2018, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite.regression;
@@ -40,8 +46,8 @@ import java.sql.Types;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 
-import com.mysql.cj.core.conf.PropertyDefinitions;
-import com.mysql.cj.core.exceptions.MysqlErrorNumbers;
+import com.mysql.cj.conf.PropertyKey;
+import com.mysql.cj.exceptions.MysqlErrorNumbers;
 
 import testsuite.BaseTestCase;
 
@@ -89,7 +95,7 @@ public class CallableStatementRegressionTest extends BaseTestCase {
     public void testBug3540() throws Exception {
         createProcedure("testBug3540", "(x int, out y int)\nBEGIN\nSELECT 1;end\n");
 
-        Connection con = getConnectionWithProps("nullNamePatternMatchesAll=true,nullCatalogMeansCurrent=true");
+        Connection con = getConnectionWithProps("nullCatalogMeansCurrent=true");
         try {
             this.rs = con.getMetaData().getProcedureColumns(null, null, "testBug3540%", "%");
 
@@ -119,7 +125,7 @@ public class CallableStatementRegressionTest extends BaseTestCase {
     public void testBug7026() throws Exception {
         createProcedure("testBug7026", "(x int, out y int)\nBEGIN\nSELECT 1;end\n");
 
-        Connection con = getConnectionWithProps("nullNamePatternMatchesAll=true,nullCatalogMeansCurrent=true");
+        Connection con = getConnectionWithProps("nullCatalogMeansCurrent=true");
         try {
             //
             // Should be found this time.
@@ -441,7 +447,7 @@ public class CallableStatementRegressionTest extends BaseTestCase {
             createProcedure("p_testBug15121", "()\nBEGIN\nSELECT * from idonotexist;\nEND");
 
             Properties props = new Properties();
-            props.setProperty(PropertyDefinitions.DBNAME_PROPERTY_KEY, "");
+            props.setProperty(PropertyKey.DBNAME.getKeyName(), "");
 
             Connection noDbConn = null;
 
@@ -1051,82 +1057,6 @@ public class CallableStatementRegressionTest extends BaseTestCase {
         }
     }
 
-    /**
-     * Tests fix for Bug#32246 - When unpacking rows directly, we don't hand off
-     * error message packets to the internal method which decodes them
-     * correctly, so no exception is rasied, and the driver than hangs trying to
-     * read rows that aren't there...
-     * 
-     * @throws Exception
-     *             if the test fails
-     */
-    public void testBug32246() throws Exception {
-        /*
-         * TODO useDirectRowUnpack property was removed
-         * 
-         * dropTable("test_table_2");
-         * dropTable("test_table_1");
-         * doBug32246(this.conn);
-         * dropTable("test_table_2");
-         * dropTable("test_table_1");
-         * doBug32246(getConnectionWithProps("useDirectRowUnpack=false"));
-         */
-    }
-
-    /*
-     * private void doBug32246(Connection aConn) throws SQLException {
-     * createTable("test_table_1", "(value_1 BIGINT PRIMARY KEY) ENGINE=InnoDB");
-     * this.stmt.executeUpdate("INSERT INTO test_table_1 VALUES (1)");
-     * createTable("test_table_2", "(value_2 BIGINT PRIMARY KEY) ENGINE=InnoDB");
-     * this.stmt.executeUpdate("DROP FUNCTION IF EXISTS test_function");
-     * createFunction("test_function", "() RETURNS BIGINT DETERMINISTIC MODIFIES SQL DATA BEGIN DECLARE max_value BIGINT; "
-     * + "SELECT MAX(value_1) INTO max_value FROM test_table_2; RETURN max_value; END;");
-     * 
-     * CallableStatement callable = null;
-     * 
-     * try {
-     * callable = aConn.prepareCall("{? = call test_function()}");
-     * 
-     * callable.registerOutParameter(1, Types.BIGINT);
-     * 
-     * try {
-     * callable.executeUpdate();
-     * fail("impossible; we should never get here.");
-     * } catch (SQLException sqlEx) {
-     * assertEquals("42S22", sqlEx.getSQLState());
-     * }
-     * 
-     * callable.close();
-     * 
-     * createTable("test_table_1", "(value_1 BIGINT PRIMARY KEY) ENGINE=InnoDB");
-     * this.stmt.executeUpdate("INSERT INTO test_table_1 VALUES (1)");
-     * createTable("test_table_2",
-     * "(value_2 BIGINT PRIMARY KEY, " + " FOREIGN KEY (value_2) REFERENCES test_table_1 (value_1) ON DELETE CASCADE) ENGINE=InnoDB");
-     * createFunction("test_function",
-     * "(value BIGINT) RETURNS BIGINT DETERMINISTIC MODIFIES SQL DATA BEGIN " + "INSERT INTO test_table_2 VALUES (value); RETURN value; END;");
-     * 
-     * callable = aConn.prepareCall("{? = call test_function(?)}");
-     * callable.registerOutParameter(1, Types.BIGINT);
-     * 
-     * callable.setLong(2, 1);
-     * callable.executeUpdate();
-     * 
-     * callable.setLong(2, 2);
-     * 
-     * try {
-     * callable.executeUpdate();
-     * fail("impossible; we should never get here.");
-     * } catch (SQLException sqlEx) {
-     * assertEquals("23000", sqlEx.getSQLState());
-     * }
-     * } finally {
-     * if (callable != null) {
-     * callable.close();
-     * }
-     * }
-     * }
-     */
-
     public void testBitSp() throws Exception {
 
         createTable("`Bit_Tab`", "( `MAX_VAL` tinyint(1) default NULL, `MIN_VAL` tinyint(1) default NULL, `NULL_VAL` tinyint(1) default NULL)");
@@ -1278,8 +1208,8 @@ public class CallableStatementRegressionTest extends BaseTestCase {
                 + "\nOUT fdoc VARCHAR(100))\nBEGIN\nSET nfact = 'ncfact string';\nSET ffact = 'ffact string';\nSET fdoc = 'fdoc string';\nEND");
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_jdbcCompliantTruncation, "true");
-        props.setProperty(PropertyDefinitions.PNAME_useInformationSchema, "true");
+        props.setProperty(PropertyKey.jdbcCompliantTruncation.getKeyName(), "true");
+        props.setProperty(PropertyKey.useInformationSchema.getKeyName(), "true");
         Connection conn1 = null;
         conn1 = getConnectionWithProps(props);
         try {
@@ -1524,7 +1454,7 @@ public class CallableStatementRegressionTest extends BaseTestCase {
         /*
          * Test function.
          */
-        createFunction("`testBug84324-db`.`testBug84324-func`", "(a INT, b VARCHAR(123)) RETURNS INT BEGIN RETURN a + LENGTH(b); END");
+        createFunction("`testBug84324-db`.`testBug84324-func`", "(a INT, b VARCHAR(123)) RETURNS INT DETERMINISTIC BEGIN RETURN a + LENGTH(b); END");
 
         final CallableStatement cstmtF = this.conn.prepareCall("{? = CALL testBug84324-db.testBug84324-func(?, ?)}");
         pmd = cstmtF.getParameterMetaData();
@@ -1557,5 +1487,67 @@ public class CallableStatementRegressionTest extends BaseTestCase {
         }); // Although the function metadata could be obtained, the end query actually fails due to syntax errors.
         cstmtP.close();
         cstmtF.close();
+    }
+
+    /**
+     * Tests fix for BUG#26259384 - CALLABLE STATEMENT GIVES ERROR IN C/JAVA WHEN RUN AGAINST MYSQL 8.0
+     * 
+     * @throws Exception
+     */
+    public void testBug26259384() throws Exception {
+        createProcedure("testBug26259384", "(IN p1 int,INOUT p2 int)\nBEGIN\nSET p2=p1+100;\nEND");
+
+        Properties props = new Properties();
+        props.setProperty("autoReconnect", "true");
+
+        Connection conn1 = getConnectionWithProps(props);
+        conn1.prepareCall("{ call testBug26259384(?+?,?) }");
+    }
+
+    /**
+     * Tests fix for BUG#87704 (26771560) - THE STREAM GETS THE RESULT SET ?THE DRIVER SIDE GET WRONG ABOUT GETLONG().
+     * 
+     * @throws Exception
+     *             if an error occurs.
+     */
+    public void testBug87704() throws Exception {
+        createProcedure("testBug87704",
+                "(IN PARAMIN BIGINT, OUT PARAM_OUT_LONG BIGINT, OUT PARAM_OUT_STR VARCHAR(100))\nBEGIN\nSET PARAM_OUT_LONG = PARAMIN + 100000;\nSET PARAM_OUT_STR = concat('STR' ,PARAM_OUT_LONG);end\n");
+
+        final Properties props = new Properties();
+        props.setProperty(PropertyKey.useSSL.getKeyName(), "false");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+        props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), "true");
+        props.setProperty(PropertyKey.cachePrepStmts.getKeyName(), "true");
+        props.setProperty(PropertyKey.prepStmtCacheSize.getKeyName(), "500");
+        props.setProperty(PropertyKey.prepStmtCacheSqlLimit.getKeyName(), "2048");
+        props.setProperty(PropertyKey.useOldAliasMetadataBehavior.getKeyName(), "true");
+        props.setProperty(PropertyKey.rewriteBatchedStatements.getKeyName(), "true");
+        props.setProperty(PropertyKey.useCursorFetch.getKeyName(), "true");
+        props.setProperty(PropertyKey.defaultFetchSize.getKeyName(), "100");
+
+        Connection con = getConnectionWithProps(props);
+
+        CallableStatement callableStatement = null;
+        try {
+            callableStatement = con.prepareCall("call testBug87704(?,?,?)");
+            callableStatement.setLong(1, 30214567L);
+            callableStatement.registerOutParameter(2, Types.BIGINT);
+            callableStatement.registerOutParameter(3, Types.VARCHAR);
+            callableStatement.execute();
+            System.out.println(callableStatement.getLong(2));
+            System.out.println(callableStatement.getString(3));
+
+            assertEquals(30314567L, callableStatement.getLong(2));
+            assertEquals("STR30314567", callableStatement.getString(3));
+
+        } finally {
+            if (callableStatement != null) {
+                callableStatement.close();
+            }
+            if (con != null) {
+                con.close();
+            }
+        }
     }
 }

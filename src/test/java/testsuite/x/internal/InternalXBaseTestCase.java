@@ -1,24 +1,30 @@
 /*
-  Copyright (c) 2015, 2017, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2015, 2018, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite.x.internal;
@@ -30,18 +36,25 @@ import java.util.concurrent.Callable;
 
 import org.junit.Assert;
 
-import com.mysql.cj.api.xdevapi.Session;
-import com.mysql.cj.api.xdevapi.SqlResult;
-import com.mysql.cj.core.ServerVersion;
-import com.mysql.cj.core.conf.DefaultPropertySet;
-import com.mysql.cj.core.conf.PropertyDefinitions;
-import com.mysql.cj.core.conf.url.ConnectionUrl;
-import com.mysql.cj.x.core.MysqlxSession;
-import com.mysql.cj.x.core.XDevAPIError;
-import com.mysql.cj.x.io.XProtocol;
-import com.mysql.cj.x.io.XProtocolFactory;
+import com.mysql.cj.MysqlxSession;
+import com.mysql.cj.ServerVersion;
+import com.mysql.cj.conf.ConnectionUrl;
+import com.mysql.cj.conf.DefaultPropertySet;
+import com.mysql.cj.conf.HostInfo;
+import com.mysql.cj.conf.PropertyDefinitions;
+import com.mysql.cj.conf.PropertyDefinitions.AuthMech;
+import com.mysql.cj.conf.PropertyKey;
+import com.mysql.cj.conf.PropertySet;
+import com.mysql.cj.exceptions.WrongArgumentException;
+import com.mysql.cj.protocol.x.XMessageBuilder;
+import com.mysql.cj.protocol.x.XProtocol;
+import com.mysql.cj.protocol.x.XProtocolError;
+import com.mysql.cj.protocol.x.XServerCapabilities;
+import com.mysql.cj.xdevapi.Session;
 import com.mysql.cj.xdevapi.SessionFactory;
 import com.mysql.cj.xdevapi.SessionImpl;
+import com.mysql.cj.xdevapi.SqlResult;
+import com.mysql.cj.xdevapi.XDevAPIError;
 
 import testsuite.TestUtils;
 
@@ -56,41 +69,47 @@ public class InternalXBaseTestCase {
     protected static final String DEFAULT_METADATA_CHARSET = "latin1";
 
     protected String baseUrl = System.getProperty(PropertyDefinitions.SYSP_testsuite_url_mysqlx);
+    protected String baseOpensslUrl = System.getProperty(PropertyDefinitions.SYSP_testsuite_url_mysqlx_openssl);
     protected boolean isSetForXTests = this.baseUrl != null && this.baseUrl.length() > 0;
+    protected boolean isSetForOpensslXTests = this.baseOpensslUrl != null && this.baseOpensslUrl.length() > 0;
     protected SessionFactory fact = new SessionFactory();
 
+    public HostInfo testHostInfo;
     public Properties testProperties = new Properties();
+    public Properties testPropertiesOpenSSL = new Properties();
 
     private ServerVersion mysqlVersion;
 
     public InternalXBaseTestCase() {
         if (this.isSetForXTests) {
             ConnectionUrl conUrl = ConnectionUrl.getConnectionUrlInstance(this.baseUrl, null);
-            if (conUrl.getType() == null) {
-                throw new RuntimeException("Initialization via URL failed for \"" + this.baseUrl + "\"");
-            }
+            this.testHostInfo = conUrl.getMainHost();
             this.testProperties = conUrl.getMainHost().exposeAsProperties();
+        }
+        if (this.isSetForOpensslXTests) {
+            ConnectionUrl conUrl = ConnectionUrl.getConnectionUrlInstance(this.baseOpensslUrl, null);
+            this.testPropertiesOpenSSL = conUrl.getMainHost().exposeAsProperties();
         }
     }
 
     public String getTestHost() {
-        return this.testProperties.getProperty(PropertyDefinitions.HOST_PROPERTY_KEY);
+        return this.testProperties.getProperty(PropertyKey.HOST.getKeyName());
     }
 
     public int getTestPort() {
-        return Integer.valueOf(this.testProperties.getProperty(PropertyDefinitions.PORT_PROPERTY_KEY));
+        return Integer.valueOf(this.testProperties.getProperty(PropertyKey.PORT.getKeyName()));
     }
 
     public String getTestUser() {
-        return this.testProperties.getProperty(PropertyDefinitions.PNAME_user);
+        return this.testProperties.getProperty(PropertyKey.USER.getKeyName());
     }
 
     public String getTestPassword() {
-        return this.testProperties.getProperty(PropertyDefinitions.PNAME_password);
+        return this.testProperties.getProperty(PropertyKey.PASSWORD.getKeyName());
     }
 
     public String getTestDatabase() {
-        return this.testProperties.getProperty(PropertyDefinitions.DBNAME_PROPERTY_KEY);
+        return this.testProperties.getProperty(PropertyKey.DBNAME.getKeyName());
     }
 
     public String getEncodedTestHost() {
@@ -102,7 +121,8 @@ public class InternalXBaseTestCase {
      */
     public XProtocol createTestProtocol() {
         // TODO pass prop. set
-        XProtocol protocol = XProtocolFactory.getInstance(getTestHost(), getTestPort(), new DefaultPropertySet());
+        XProtocol protocol = new XProtocol(getTestHost(), getTestPort(), getTestDatabase(), new DefaultPropertySet());
+        protocol.beforeHandshake();
         return protocol;
     }
 
@@ -111,18 +131,61 @@ public class InternalXBaseTestCase {
      */
     public XProtocol createAuthenticatedTestProtocol() {
         XProtocol protocol = createTestProtocol();
+        XMessageBuilder messageBuilder = (XMessageBuilder) protocol.getMessageBuilder();
 
-        protocol.sendSaslMysql41AuthStart();
-        byte[] salt = protocol.readAuthenticateContinue();
-        protocol.sendSaslMysql41AuthContinue(getTestUser(), getTestPassword(), salt, getTestDatabase());
-        protocol.readAuthenticateOk();
+        AuthMech authMech = protocol.getPropertySet().<AuthMech> getEnumProperty(PropertyKey.xdevapiAuth).getValue();
+        boolean overTLS = ((XServerCapabilities) protocol.getServerSession().getCapabilities()).getTls();
 
-        return protocol;
+        // Choose the best default auth mechanism.
+        if (!overTLS) {
+            authMech = AuthMech.MYSQL41;
+        } else if (authMech != AuthMech.PLAIN) {
+            authMech = AuthMech.PLAIN;
+        }
+
+        while (true) {
+            switch (authMech) {
+                case SHA256_MEMORY:
+                    protocol.send(messageBuilder.buildSha256MemoryAuthStart(), 0);
+                    byte[] nonce = protocol.readAuthenticateContinue();
+                    protocol.send(messageBuilder.buildSha256MemoryAuthContinue(getTestUser(), getTestPassword(), nonce, getTestDatabase()), 0);
+                    break;
+                case MYSQL41:
+                    protocol.send(messageBuilder.buildMysql41AuthStart(), 0);
+                    byte[] salt = protocol.readAuthenticateContinue();
+                    protocol.send(messageBuilder.buildMysql41AuthContinue(getTestUser(), getTestPassword(), salt, getTestDatabase()), 0);
+                    break;
+                case PLAIN:
+                    if (overTLS) {
+                        protocol.send(messageBuilder.buildPlainAuthStart(getTestUser(), getTestPassword(), getTestDatabase()), 0);
+                    } else {
+                        throw new XDevAPIError("PLAIN authentication is not allowed via unencrypted connection.");
+                    }
+                    break;
+                case EXTERNAL:
+                    protocol.send(messageBuilder.buildExternalAuthStart(getTestDatabase()), 0);
+                    break;
+                default:
+                    throw new WrongArgumentException("Unknown authentication mechanism '" + authMech + "'.");
+            }
+
+            try {
+                protocol.readAuthenticateOk();
+                return protocol;
+            } catch (XProtocolError e) {
+                if (authMech == AuthMech.MYSQL41) {
+                    authMech = AuthMech.SHA256_MEMORY; // try again using SHA256_MEMORY
+                } else {
+                    throw e;
+                }
+            }
+        }
     }
 
     public MysqlxSession createTestSession() {
-        MysqlxSession session = new MysqlxSession(this.testProperties);
-        session.changeUser(getTestUser(), getTestPassword(), getTestDatabase());
+        PropertySet pset = new DefaultPropertySet();
+        pset.initializeProperties(this.testProperties);
+        MysqlxSession session = new MysqlxSession(this.testHostInfo, pset);
         return session;
     }
 
@@ -133,15 +196,16 @@ public class InternalXBaseTestCase {
      */
     public String createTempTestCollection(XProtocol protocol) {
         String collName = "protocol_test_collection";
+        XMessageBuilder messageBuilder = (XMessageBuilder) protocol.getMessageBuilder();
 
         try {
-            protocol.sendDropCollection(getTestDatabase(), collName);
-            protocol.readStatementExecuteOk();
-        } catch (XDevAPIError err) {
+            protocol.send(messageBuilder.buildDropCollection(getTestDatabase(), collName), 0);
+            protocol.readQueryResult();
+        } catch (XProtocolError err) {
             // ignore
         }
-        protocol.sendCreateCollection(getTestDatabase(), collName);
-        protocol.readStatementExecuteOk();
+        protocol.send(messageBuilder.buildCreateCollection(getTestDatabase(), collName), 0);
+        protocol.readQueryResult();
 
         return collName;
     }
@@ -192,7 +256,7 @@ public class InternalXBaseTestCase {
     protected boolean mysqlVersionMeetsMinimum(ServerVersion version) {
         if (this.isSetForXTests) {
             if (this.mysqlVersion == null) {
-                Session session = new SessionImpl(this.testProperties);
+                Session session = new SessionImpl(this.testHostInfo);
                 this.mysqlVersion = ServerVersion.parseVersion(session.sql("SELECT version()").execute().fetchOne().getString(0));
                 session.close();
             }

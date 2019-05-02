@@ -1,24 +1,30 @@
 /*
-  Copyright (c) 2002, 2017, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2002, 2018, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite.simple;
@@ -31,14 +37,13 @@ import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.util.Calendar;
-import java.util.Locale;
 import java.util.Properties;
 import java.util.TimeZone;
 
-import com.mysql.cj.core.conf.PropertyDefinitions;
-import com.mysql.cj.core.exceptions.MysqlErrorNumbers;
+import com.mysql.cj.conf.PropertyKey;
+import com.mysql.cj.exceptions.MysqlErrorNumbers;
+import com.mysql.cj.util.TimeUtil;
 
 import testsuite.BaseTestCase;
 
@@ -85,7 +90,7 @@ public class DateTest extends BaseTestCase {
         System.out.println(cal);
 
         // DateFormat df = SimpleDateFormat.getInstance();
-        DateFormat df = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss z");
+        DateFormat df = TimeUtil.getSimpleDateFormat(null, "yyyy/MM/dd HH:mm:ss z", null, null);
 
         Calendar calGMT = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
         // df.setTimeZone(TimeZone.getTimeZone("GMT"));
@@ -182,12 +187,12 @@ public class DateTest extends BaseTestCase {
         try {
             if (versionMeetsMinimum(5, 7, 4)) {
                 Properties props = new Properties();
-                props.setProperty(PropertyDefinitions.PNAME_jdbcCompliantTruncation, "false");
+                props.setProperty(PropertyKey.jdbcCompliantTruncation.getKeyName(), "false");
                 if (versionMeetsMinimum(5, 7, 5)) {
                     String sqlMode = getMysqlVariable("sql_mode");
                     if (sqlMode.contains("STRICT_TRANS_TABLES")) {
                         sqlMode = removeSqlMode("STRICT_TRANS_TABLES", sqlMode);
-                        props.setProperty(PropertyDefinitions.PNAME_sessionVariables, "sql_mode='" + sqlMode + "'");
+                        props.setProperty(PropertyKey.sessionVariables.getKeyName(), "sql_mode='" + sqlMode + "'");
                     }
                 }
                 testConn = getConnectionWithProps(props);
@@ -204,18 +209,18 @@ public class DateTest extends BaseTestCase {
             this.rs.next();
 
             assertEquals("0001-01-01", this.rs.getDate(1).toString());
-            assertEquals("0001-01-01 00:00:00.0", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.0", Locale.US).format(this.rs.getTimestamp(1)));
+            assertEquals("0001-01-01 00:00:00.0", TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd HH:mm:ss.0", null, null).format(this.rs.getTimestamp(1)));
             assertEquals("0001-01-01", this.rs.getDate(2).toString());
-            assertEquals("0001-01-01 00:00:00.0", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.0", Locale.US).format(this.rs.getTimestamp(2)));
+            assertEquals("0001-01-01 00:00:00.0", TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd HH:mm:ss.0", null, null).format(this.rs.getTimestamp(2)));
 
             PreparedStatement roundPrepStmt = roundConn.prepareStatement("SELECT fieldAsString, fieldAsDateTime FROM testZeroDateBehavior");
             this.rs = roundPrepStmt.executeQuery();
             this.rs.next();
 
             assertEquals("0001-01-01", this.rs.getDate(1).toString());
-            assertEquals("0001-01-01 00:00:00.0", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.0", Locale.US).format(this.rs.getTimestamp(1)));
+            assertEquals("0001-01-01 00:00:00.0", TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd HH:mm:ss.0", null, null).format(this.rs.getTimestamp(1)));
             assertEquals("0001-01-01", this.rs.getDate(2).toString());
-            assertEquals("0001-01-01 00:00:00.0", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.0", Locale.US).format(this.rs.getTimestamp(2)));
+            assertEquals("0001-01-01 00:00:00.0", TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd HH:mm:ss.0", null, null).format(this.rs.getTimestamp(2)));
 
             nullConn = getConnectionWithProps("zeroDateTimeBehavior=CONVERT_TO_NULL");
             Statement nullStmt = nullConn.createStatement();

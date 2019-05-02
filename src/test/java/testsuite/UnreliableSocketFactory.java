@@ -1,28 +1,35 @@
 /*
-  Copyright (c) 2008, 2016, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2008, 2018, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -37,11 +44,11 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
 
-import com.mysql.cj.core.conf.PropertyDefinitions;
-import com.mysql.cj.core.io.StandardSocketFactory;
+import com.mysql.cj.conf.PropertyKey;
+import com.mysql.cj.conf.PropertySet;
+import com.mysql.cj.protocol.StandardSocketFactory;
 
 /**
  * Configure "socketFactory" to use this class in your JDBC URL, and it will operate as normal, unless you map some host aliases to actual IP addresses, and
@@ -59,16 +66,16 @@ public class UnreliableSocketFactory extends StandardSocketFactory {
 
     public static final long DEFAULT_TIMEOUT_MILLIS = 10 * 60 * 1000; // ugh
 
-    private static final Map<String, String> MAPPED_HOSTS = new HashMap<String, String>();
-    static final Set<String> HUNG_READ_HOSTS = new HashSet<String>();
-    static final Set<String> HUNG_WRITE_HOSTS = new HashSet<String>();
-    static final Set<String> HUNG_CONNECT_HOSTS = new HashSet<String>();
-    static final Set<String> IMMEDIATELY_DOWNED_HOSTS = new HashSet<String>();
-    static final List<String> CONNECTION_ATTEMPTS = new LinkedList<String>();
+    private static final Map<String, String> MAPPED_HOSTS = new HashMap<>();
+    static final Set<String> HUNG_READ_HOSTS = new HashSet<>();
+    static final Set<String> HUNG_WRITE_HOSTS = new HashSet<>();
+    static final Set<String> HUNG_CONNECT_HOSTS = new HashSet<>();
+    static final Set<String> IMMEDIATELY_DOWNED_HOSTS = new HashSet<>();
+    static final List<String> CONNECTION_ATTEMPTS = new LinkedList<>();
 
     private String hostname;
     private int portNumber;
-    private Properties props;
+    private PropertySet propSet;
 
     public static String getHostConnectedStatus(String host) {
         return STATUS_CONNECTED + host;
@@ -158,12 +165,13 @@ public class UnreliableSocketFactory extends StandardSocketFactory {
         return lastHost == null ? false : lastHost.startsWith(STATUS_CONNECTED);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
-    public Socket connect(String host_name, int port_number, Properties prop, int loginTimeout) throws SocketException, IOException {
+    public <T extends Closeable> T connect(String host_name, int port_number, PropertySet pset, int loginTimeout) throws IOException {
         this.loginTimeoutCountdown = loginTimeout;
         this.hostname = host_name;
         this.portNumber = port_number;
-        this.props = prop;
+        this.propSet = pset;
 
         Socket socket = null;
         String result = STATUS_UNKNOWN;
@@ -179,13 +187,13 @@ public class UnreliableSocketFactory extends StandardSocketFactory {
         } finally {
             CONNECTION_ATTEMPTS.add(result + host_name);
         }
-        return socket;
+        return (T) socket;
     }
 
     private Socket getNewSocket() throws SocketException, IOException {
         if (IMMEDIATELY_DOWNED_HOSTS.contains(this.hostname)) {
 
-            sleepMillisForProperty(this.props, PropertyDefinitions.PNAME_connectTimeout);
+            sleepMillisForProperty(this.propSet, PropertyKey.connectTimeout);
 
             throw new SocketTimeoutException();
         }
@@ -196,22 +204,15 @@ public class UnreliableSocketFactory extends StandardSocketFactory {
             hostnameToConnectTo = this.hostname;
         }
 
-        return new HangingSocket(super.connect(hostnameToConnectTo, this.portNumber, this.props, this.loginTimeoutCountdown), this.props, this.hostname);
+        this.rawSocket = new HangingSocket(super.connect(hostnameToConnectTo, this.portNumber, this.propSet, this.loginTimeoutCountdown), this.propSet,
+                this.hostname);
+        return this.rawSocket;
     }
 
-    @Override
-    public Socket afterHandshake() throws SocketException, IOException {
-        return getNewSocket();
-    }
-
-    @Override
-    public Socket beforeHandshake() throws SocketException, IOException {
-        return getNewSocket();
-    }
-
-    static void sleepMillisForProperty(Properties props, String name) {
+    static void sleepMillisForProperty(PropertySet pset, PropertyKey name) {
         try {
-            Thread.sleep(Long.parseLong(props.getProperty(name, String.valueOf(DEFAULT_TIMEOUT_MILLIS))));
+            Integer timeout = pset.getIntegerProperty(name).getValue();
+            Thread.sleep(timeout != null ? timeout : DEFAULT_TIMEOUT_MILLIS);
         } catch (NumberFormatException e) {
             throw new RuntimeException(e);
         } catch (InterruptedException e) {
@@ -220,6 +221,17 @@ public class UnreliableSocketFactory extends StandardSocketFactory {
     }
 
     class HangingSocket extends Socket {
+
+        final Socket underlyingSocket;
+        final PropertySet propSet;
+        final String aliasedHostname;
+
+        HangingSocket(Socket realSocket, PropertySet pset, String aliasedHostname) {
+            this.underlyingSocket = realSocket;
+            this.propSet = pset;
+            this.aliasedHostname = aliasedHostname;
+        }
+
         @Override
         public void bind(SocketAddress bindpoint) throws IOException {
 
@@ -247,7 +259,7 @@ public class UnreliableSocketFactory extends StandardSocketFactory {
         @Override
         public InputStream getInputStream() throws IOException {
 
-            return new HangingInputStream(this.underlyingSocket.getInputStream(), this.props, this.aliasedHostname);
+            return new HangingInputStream(this.underlyingSocket.getInputStream(), this.propSet, this.aliasedHostname);
         }
 
         @Override
@@ -282,7 +294,7 @@ public class UnreliableSocketFactory extends StandardSocketFactory {
 
         @Override
         public OutputStream getOutputStream() throws IOException {
-            return new HangingOutputStream(this.underlyingSocket.getOutputStream(), this.props, this.aliasedHostname);
+            return new HangingOutputStream(this.underlyingSocket.getOutputStream(), this.propSet, this.aliasedHostname);
         }
 
         @Override
@@ -426,27 +438,16 @@ public class UnreliableSocketFactory extends StandardSocketFactory {
         public String toString() {
             return this.underlyingSocket.toString();
         }
-
-        final Socket underlyingSocket;
-        final Properties props;
-        final String aliasedHostname;
-
-        HangingSocket(Socket realSocket, Properties props, String aliasedHostname) {
-            this.underlyingSocket = realSocket;
-            this.props = props;
-            this.aliasedHostname = aliasedHostname;
-        }
-
     }
 
     static class HangingInputStream extends InputStream {
         final InputStream underlyingInputStream;
-        final Properties props;
+        final PropertySet propSet;
         final String aliasedHostname;
 
-        HangingInputStream(InputStream realInputStream, Properties props, String aliasedHostname) {
+        HangingInputStream(InputStream realInputStream, PropertySet pset, String aliasedHostname) {
             this.underlyingInputStream = realInputStream;
-            this.props = props;
+            this.propSet = pset;
             this.aliasedHostname = aliasedHostname;
         }
 
@@ -505,7 +506,7 @@ public class UnreliableSocketFactory extends StandardSocketFactory {
 
         private void failIfRequired() throws SocketTimeoutException {
             if (HUNG_READ_HOSTS.contains(this.aliasedHostname) || IMMEDIATELY_DOWNED_HOSTS.contains(this.aliasedHostname)) {
-                sleepMillisForProperty(this.props, PropertyDefinitions.PNAME_socketTimeout);
+                sleepMillisForProperty(this.propSet, PropertyKey.socketTimeout);
 
                 throw new SocketTimeoutException();
             }
@@ -514,13 +515,13 @@ public class UnreliableSocketFactory extends StandardSocketFactory {
 
     static class HangingOutputStream extends OutputStream {
 
-        final Properties props;
+        final PropertySet propSet;
         final String aliasedHostname;
         final OutputStream underlyingOutputStream;
 
-        HangingOutputStream(OutputStream realOutputStream, Properties props, String aliasedHostname) {
+        HangingOutputStream(OutputStream realOutputStream, PropertySet pset, String aliasedHostname) {
             this.underlyingOutputStream = realOutputStream;
-            this.props = props;
+            this.propSet = pset;
             this.aliasedHostname = aliasedHostname;
         }
 
@@ -555,7 +556,7 @@ public class UnreliableSocketFactory extends StandardSocketFactory {
 
         private void failIfRequired() throws SocketTimeoutException {
             if (HUNG_WRITE_HOSTS.contains(this.aliasedHostname) || IMMEDIATELY_DOWNED_HOSTS.contains(this.aliasedHostname)) {
-                sleepMillisForProperty(this.props, PropertyDefinitions.PNAME_socketTimeout);
+                sleepMillisForProperty(this.propSet, PropertyKey.socketTimeout);
 
                 throw new SocketTimeoutException();
             }

@@ -1,24 +1,30 @@
 /*
-  Copyright (c) 2002, 2017, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2002, 2018, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite.regression;
@@ -52,10 +58,12 @@ import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;
 
-import com.mysql.cj.api.MysqlConnection;
-import com.mysql.cj.api.conf.ModifiableProperty;
-import com.mysql.cj.api.jdbc.JdbcConnection;
-import com.mysql.cj.core.conf.PropertyDefinitions;
+import com.mysql.cj.MysqlConnection;
+import com.mysql.cj.conf.AbstractRuntimeProperty;
+import com.mysql.cj.conf.PropertyDefinitions;
+import com.mysql.cj.conf.PropertyKey;
+import com.mysql.cj.conf.RuntimeProperty;
+import com.mysql.cj.jdbc.JdbcConnection;
 import com.mysql.cj.jdbc.MysqlConnectionPoolDataSource;
 import com.mysql.cj.jdbc.MysqlDataSource;
 import com.mysql.cj.jdbc.MysqlDataSourceFactory;
@@ -288,17 +296,17 @@ public class DataSourceRegressionTest extends BaseTestCase {
     public void testBug19169() throws Exception {
         MysqlDataSource toSerialize = new MysqlDataSource();
 
-        toSerialize.<PropertyDefinitions.ZeroDatetimeBehavior> getModifiableProperty(PropertyDefinitions.PNAME_zeroDateTimeBehavior)
+        toSerialize.<PropertyDefinitions.ZeroDatetimeBehavior> getProperty(PropertyKey.zeroDateTimeBehavior)
                 .setValue(PropertyDefinitions.ZeroDatetimeBehavior.CONVERT_TO_NULL);
 
-        toSerialize.<String> getModifiableProperty(PropertyDefinitions.PNAME_loadBalanceStrategy).setValue("test_lb_strategy");
+        toSerialize.<String> getProperty(PropertyKey.ha_loadBalanceStrategy).setValue("test_lb_strategy");
 
-        boolean testBooleanFlag = !toSerialize.getBooleanReadableProperty(PropertyDefinitions.PNAME_allowLoadLocalInfile).getValue();
-        toSerialize.<Boolean> getJdbcModifiableProperty(PropertyDefinitions.PNAME_allowLoadLocalInfile).setValue(testBooleanFlag);
+        boolean testBooleanFlag = !toSerialize.getBooleanProperty(PropertyKey.allowLoadLocalInfile).getValue();
+        toSerialize.<Boolean> getProperty(PropertyKey.allowLoadLocalInfile).setValue(testBooleanFlag);
 
-        ModifiableProperty<Integer> bscs = toSerialize.<Integer> getModifiableProperty(PropertyDefinitions.PNAME_blobSendChunkSize);
+        RuntimeProperty<Integer> bscs = toSerialize.<Integer> getProperty(PropertyKey.blobSendChunkSize);
         int testIntFlag = bscs.getValue() + 1;
-        bscs.setFromString(String.valueOf(testIntFlag), null);
+        ((AbstractRuntimeProperty<?>) bscs).setValueInternal(String.valueOf(testIntFlag), null);
 
         ByteArrayOutputStream bOut = new ByteArrayOutputStream();
         ObjectOutputStream objOut = new ObjectOutputStream(bOut);
@@ -309,11 +317,10 @@ public class DataSourceRegressionTest extends BaseTestCase {
 
         MysqlDataSource thawedDs = (MysqlDataSource) objIn.readObject();
 
-        assertEquals(PropertyDefinitions.ZeroDatetimeBehavior.CONVERT_TO_NULL,
-                thawedDs.getEnumReadableProperty(PropertyDefinitions.PNAME_zeroDateTimeBehavior).getValue());
-        assertEquals("test_lb_strategy", thawedDs.getStringReadableProperty(PropertyDefinitions.PNAME_loadBalanceStrategy).getValue());
-        assertEquals(testBooleanFlag, thawedDs.getBooleanReadableProperty(PropertyDefinitions.PNAME_allowLoadLocalInfile).getValue().booleanValue());
-        assertEquals(testIntFlag, thawedDs.getMemorySizeReadableProperty(PropertyDefinitions.PNAME_blobSendChunkSize).getValue().intValue());
+        assertEquals(PropertyDefinitions.ZeroDatetimeBehavior.CONVERT_TO_NULL, thawedDs.getEnumProperty(PropertyKey.zeroDateTimeBehavior).getValue());
+        assertEquals("test_lb_strategy", thawedDs.getStringProperty(PropertyKey.ha_loadBalanceStrategy).getValue());
+        assertEquals(testBooleanFlag, thawedDs.getBooleanProperty(PropertyKey.allowLoadLocalInfile).getValue().booleanValue());
+        assertEquals(testIntFlag, thawedDs.getMemorySizeProperty(PropertyKey.blobSendChunkSize).getValue().intValue());
     }
 
     /**
@@ -444,8 +451,8 @@ public class DataSourceRegressionTest extends BaseTestCase {
         System.out.println(asRef);
 
         removeFromRef(asRef, "port");
-        removeFromRef(asRef, PropertyDefinitions.PNAME_user);
-        removeFromRef(asRef, PropertyDefinitions.PNAME_password);
+        removeFromRef(asRef, PropertyKey.USER.getKeyName());
+        removeFromRef(asRef, PropertyKey.PASSWORD.getKeyName());
         removeFromRef(asRef, "serverName");
         removeFromRef(asRef, "databaseName");
 
@@ -486,8 +493,7 @@ public class DataSourceRegressionTest extends BaseTestCase {
     }
 
     public void testBug35810() throws Exception {
-        int defaultConnectTimeout = ((JdbcConnection) this.conn).getPropertySet().getIntegerReadableProperty(PropertyDefinitions.PNAME_connectTimeout)
-                .getValue();
+        int defaultConnectTimeout = ((JdbcConnection) this.conn).getPropertySet().getIntegerProperty(PropertyKey.connectTimeout).getValue();
         int nonDefaultConnectTimeout = defaultConnectTimeout + 1000 * 2;
         MysqlConnectionPoolDataSource cpds = new MysqlConnectionPoolDataSource();
         String dsUrl = BaseTestCase.dbUrl;
@@ -501,8 +507,7 @@ public class DataSourceRegressionTest extends BaseTestCase {
         cpds.setUrl(dsUrl);
 
         Connection dsConn = cpds.getPooledConnection().getConnection();
-        int configuredConnectTimeout = ((JdbcConnection) dsConn).getPropertySet().getIntegerReadableProperty(PropertyDefinitions.PNAME_connectTimeout)
-                .getValue();
+        int configuredConnectTimeout = ((JdbcConnection) dsConn).getPropertySet().getIntegerProperty(PropertyKey.connectTimeout).getValue();
 
         assertEquals("Connect timeout spec'd by URL didn't take", nonDefaultConnectTimeout, configuredConnectTimeout);
         assertFalse("Connect timeout spec'd by URL didn't take", defaultConnectTimeout == configuredConnectTimeout);
@@ -604,7 +609,7 @@ public class DataSourceRegressionTest extends BaseTestCase {
     public void testBug72632() throws Exception {
         final MysqlDataSource dataSource = new MysqlDataSource();
         dataSource.setUrl("jdbc:mysql:nonsupported:");
-        assertThrows(SQLException.class, "Failed to get a connection using the URL 'jdbc:mysql:nonsupported:'.", new Callable<Void>() {
+        assertThrows(SQLException.class, "Connector/J cannot handle a connection string 'jdbc:mysql:nonsupported:'.", new Callable<Void>() {
             public Void call() throws Exception {
                 dataSource.getConnection();
                 return null;

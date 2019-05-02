@@ -1,29 +1,37 @@
 /*
-  Copyright (c) 2015, 2016, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2015, 2018, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package com.mysql.cj.xdevapi;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.StringReader;
@@ -32,13 +40,7 @@ import java.util.concurrent.Callable;
 
 import org.junit.Test;
 
-import com.mysql.cj.core.exceptions.WrongArgumentException;
-import com.mysql.cj.xdevapi.DbDoc;
-import com.mysql.cj.xdevapi.JsonArray;
-import com.mysql.cj.xdevapi.JsonLiteral;
-import com.mysql.cj.xdevapi.JsonNumber;
-import com.mysql.cj.xdevapi.JsonParser;
-import com.mysql.cj.xdevapi.JsonString;
+import com.mysql.cj.exceptions.WrongArgumentException;
 
 /**
  * DbDoc tests.
@@ -108,12 +110,14 @@ public class JsonDocTest {
             }
         });
 
+        val = JsonParser.parseString(new StringReader("\"\""));
+        assertEquals("", val.getString());
+
         val = JsonParser.parseString(new StringReader(""));
-        assertEquals("", val.getString());
+        assertNull(val);
 
-        val = JsonParser.parseString(new StringReader(" \\r\\n"));
-        assertEquals("", val.getString());
-
+        val = JsonParser.parseString(new StringReader(" \\t\\r\\n"));
+        assertNull(val);
     }
 
     @Test
@@ -247,54 +251,35 @@ public class JsonDocTest {
         val = JsonParser.parseNumber(new StringReader("1234567890"));
         assertEquals(new BigDecimal("1234567890"), val.getBigDecimal());
 
-        assertThrows(WrongArgumentException.class, "Base part '-12345678901' is too long, only 10 digits are allowed.", new Callable<Void>() {
-            public Void call() throws Exception {
-                JsonParser.parseNumber(new StringReader("-12345678901.5E+12"));
-                return null;
-            }
-        });
-        assertThrows(WrongArgumentException.class, "Base part '12345678901' is too long, only 10 digits are allowed.", new Callable<Void>() {
-            public Void call() throws Exception {
-                JsonParser.parseNumber(new StringReader("12345678901.5E+12"));
-                return null;
-            }
-        });
-        assertThrows(WrongArgumentException.class, "Base part '-12345678901' is too long, only 10 digits are allowed.", new Callable<Void>() {
-            public Void call() throws Exception {
-                JsonParser.parseNumber(new StringReader("-12345678901.5"));
-                return null;
-            }
-        });
-        assertThrows(WrongArgumentException.class, "Base part '12345678901' is too long, only 10 digits are allowed.", new Callable<Void>() {
-            public Void call() throws Exception {
-                JsonParser.parseNumber(new StringReader("12345678901.5"));
-                return null;
-            }
-        });
-        assertThrows(WrongArgumentException.class, "Base part '-12345678901' is too long, only 10 digits are allowed.", new Callable<Void>() {
-            public Void call() throws Exception {
-                JsonParser.parseNumber(new StringReader("-12345678901E+12"));
-                return null;
-            }
-        });
-        assertThrows(WrongArgumentException.class, "Base part '12345678901' is too long, only 10 digits are allowed.", new Callable<Void>() {
-            public Void call() throws Exception {
-                JsonParser.parseNumber(new StringReader("12345678901E+12"));
-                return null;
-            }
-        });
-        assertThrows(WrongArgumentException.class, "Base part '-12345678901' is too long, only 10 digits are allowed.", new Callable<Void>() {
-            public Void call() throws Exception {
-                JsonParser.parseNumber(new StringReader("-12345678901"));
-                return null;
-            }
-        });
-        assertThrows(WrongArgumentException.class, "Base part '12345678901' is too long, only 10 digits are allowed.", new Callable<Void>() {
-            public Void call() throws Exception {
-                JsonParser.parseNumber(new StringReader("12345678901"));
-                return null;
-            }
-        });
+        val = JsonParser.parseNumber(new StringReader("-12345678901.5E+12"));
+        assertEquals(new BigDecimal("-12345678901.5E+12"), val.getBigDecimal());
+
+        val = JsonParser.parseNumber(new StringReader("12345678901.5E+12"));
+        assertEquals(new BigDecimal("12345678901.5E+12"), val.getBigDecimal());
+
+        val = JsonParser.parseNumber(new StringReader("-12345678901.5"));
+        assertEquals(new BigDecimal("-12345678901.5"), val.getBigDecimal());
+
+        val = JsonParser.parseNumber(new StringReader("12345678901.5"));
+        assertEquals(new BigDecimal("12345678901.5"), val.getBigDecimal());
+
+        val = JsonParser.parseNumber(new StringReader("-12345678901E+12"));
+        assertEquals(new BigDecimal("-12345678901E+12"), val.getBigDecimal());
+
+        val = JsonParser.parseNumber(new StringReader("12345678901E+12"));
+        assertEquals(new BigDecimal("12345678901E+12"), val.getBigDecimal());
+
+        val = JsonParser.parseNumber(new StringReader("-12345678901"));
+        assertEquals(new BigDecimal("-12345678901"), val.getBigDecimal());
+
+        val = JsonParser.parseNumber(new StringReader("12345678901"));
+        assertEquals(new BigDecimal("12345678901"), val.getBigDecimal());
+
+        val = JsonParser.parseNumber(new StringReader("-1546300800000"));
+        assertEquals(new BigDecimal("-1546300800000"), val.getBigDecimal());
+
+        val = JsonParser.parseNumber(new StringReader("1546300800000"));
+        assertEquals(new BigDecimal("1546300800000"), val.getBigDecimal());
 
         // integer
         val = JsonParser.parseNumber(new StringReader("12345"));
@@ -500,14 +485,17 @@ public class JsonDocTest {
         assertEquals("false", val.get(3).toString());
         assertEquals(JsonLiteral.NULL.getClass(), val.get(4).getClass());
         assertEquals("null", val.get(4).toString());
-        assertEquals(DbDoc.class, val.get(5).getClass());
-        assertEquals("{\n\"k1\" : \"v1\"\n}", val.get(5).toString());
+        assertTrue(DbDoc.class.isAssignableFrom(val.get(5).getClass()));
+        assertEquals("{\"k1\":\"v1\"}", val.get(5).toString());
+        assertEquals("{\n\"k1\" : \"v1\"\n}", val.get(5).toFormattedString());
         assertEquals(JsonArray.class, val.get(6).getClass());
-        assertEquals("[1, 2, 3]", val.get(6).toString());
+        assertEquals("[1,2,3]", val.get(6).toString());
+        assertEquals("[1, 2, 3]", val.get(6).toFormattedString());
 
         // ignore whitespaces
         val = JsonParser.parseArray(new StringReader(" \r\n  [ \r\n 1, \n 2 \r\n  ]  \r\n "));
-        assertEquals("[1, 2]", val.toString());
+        assertEquals("[1,2]", val.toString());
+        assertEquals("[1, 2]", val.toFormattedString());
 
         // wrong spaces
         assertThrows(WrongArgumentException.class, "Invalid whitespace character 'a'.", new Callable<Void>() {
@@ -536,7 +524,8 @@ public class JsonDocTest {
         });
 
         val = JsonParser.parseArray(new StringReader("    [   1 ,  2   ]  x "));
-        assertEquals("[1, 2]", val.toString());
+        assertEquals("[1,2]", val.toString());
+        assertEquals("[1, 2]", val.toFormattedString());
 
         // check brackets
         assertThrows(WrongArgumentException.class, "Missed closing ']'.", new Callable<Void>() {
@@ -629,8 +618,16 @@ public class JsonDocTest {
             }
         });
 
+        assertThrows(WrongArgumentException.class, "Invalid whitespace character ']'.", new Callable<Void>() {
+            public Void call() throws Exception {
+                JsonParser.parseDoc("{\"_id\":\"1004\",\"F1\": ] }");
+                return null;
+            }
+        });
+
         StringBuilder sb = new StringBuilder();
         sb.append("{");
+        sb.append("\"\" : \"val0\", ");
         sb.append("\"key1\" : \"val1\", ");
         sb.append("\"key2\" : -1.2E-12, ");
         sb.append("\"key3\" : {\"in.key1\" :   true, \"in.key2\" : 3.1415}, ");
@@ -642,24 +639,31 @@ public class JsonDocTest {
 
         doc = JsonParser.parseDoc(new StringReader(sb.toString()));
 
-        assertEquals(7, doc.size());
+        assertEquals(8, doc.size());
+        assertEquals(JsonString.class, doc.get("").getClass());
+        assertEquals("\"val0\"", doc.get("").toString());
         assertEquals(JsonString.class, doc.get("key1").getClass());
         assertEquals("\"val1\"", doc.get("key1").toString());
         assertEquals(JsonNumber.class, doc.get("key2").getClass());
         assertEquals("-1.2E-12", doc.get("key2").toString());
-        assertEquals(DbDoc.class, doc.get("key3").getClass());
-        assertEquals("{\n\"in.key1\" : true,\n\"in.key2\" : 3.1415\n}", doc.get("key3").toString());
+        assertTrue(DbDoc.class.isAssignableFrom(doc.get("key3").getClass()));
+        assertEquals("{\"in.key1\":true,\"in.key2\":3.1415}", doc.get("key3").toString());
+        assertEquals("{\n\"in.key1\" : true,\n\"in.key2\" : 3.1415\n}", doc.get("key3").toFormattedString());
         assertEquals(JsonLiteral.FALSE.getClass(), doc.get("key4").getClass());
         assertEquals("false", doc.get("key4").toString());
         assertEquals(JsonArray.class, doc.get("key5").getClass());
-        assertEquals("[\"arr.val1\", null]", doc.get("key5").toString());
+        assertEquals("[\"arr.val1\",null]", doc.get("key5").toString());
+        assertEquals("[\"arr.val1\", null]", doc.get("key5").toFormattedString());
         assertEquals(JsonLiteral.TRUE.getClass(), doc.get("key6").getClass());
         assertEquals("true", doc.get("key6").toString());
         assertEquals(JsonLiteral.NULL.getClass(), doc.get("key7").getClass());
         assertEquals("null", doc.get("key7").toString());
 
-        assertEquals("{\n\"key1\" : \"val1\",\n\"key2\" : -1.2E-12,\n\"key3\" : {\n\"in.key1\" : true,\n\"in.key2\" : 3.1415\n},\n"
-                + "\"key4\" : false,\n\"key5\" : [\"arr.val1\", null],\n\"key6\" : true,\n\"key7\" : null\n}", doc.toString());
+        assertEquals("{\"\":\"val0\",\"key1\":\"val1\",\"key2\":-1.2E-12,\"key3\":{\"in.key1\":true,\"in.key2\":3.1415},"
+                + "\"key4\":false,\"key5\":[\"arr.val1\",null],\"key6\":true,\"key7\":null}", doc.toString());
+
+        assertEquals("{\n\"\" : \"val0\",\n\"key1\" : \"val1\",\n\"key2\" : -1.2E-12,\n\"key3\" : {\n\"in.key1\" : true,\n\"in.key2\" : 3.1415\n},\n"
+                + "\"key4\" : false,\n\"key5\" : [\"arr.val1\", null],\n\"key6\" : true,\n\"key7\" : null\n}", doc.toFormattedString());
 
         // Number at the end
         doc = JsonParser.parseDoc(new StringReader("{\"x\" : 2}"));
@@ -682,32 +686,38 @@ public class JsonDocTest {
         // Array at the end
         doc = JsonParser.parseDoc(new StringReader("{\"x\" : [1,2]}"));
         assertEquals(JsonArray.class, doc.get("x").getClass());
-        assertEquals("[1, 2]", doc.get("x").toString());
+        assertEquals("[1,2]", doc.get("x").toString());
+        assertEquals("[1, 2]", doc.get("x").toFormattedString());
 
         // DbDoc at the end
         doc = JsonParser.parseDoc(new StringReader("{\"x\" : {\"y\" : true}}"));
-        assertEquals(DbDoc.class, doc.get("x").getClass());
-        assertEquals("{\n\"y\" : true\n}", doc.get("x").toString());
+        assertTrue(DbDoc.class.isAssignableFrom(doc.get("x").getClass()));
+        assertEquals("{\"y\":true}", doc.get("x").toString());
+        assertEquals("{\n\"y\" : true\n}", doc.get("x").toFormattedString());
 
     }
 
     @Test
     public void testToJsonString() {
 
-        DbDoc doc = new DbDoc().add("field1", new JsonString().setValue("value 1")).add("field2", new JsonNumber().setValue("12345.44E22"))
+        DbDoc doc = new DbDocImpl().add("field1", new JsonString().setValue("value 1")).add("field2", new JsonNumber().setValue("12345.44E22"))
                 .add("field3", JsonLiteral.TRUE).add("field4", JsonLiteral.FALSE).add("field5", JsonLiteral.NULL)
                 .add("field6",
-                        new DbDoc().add("inner field 1", new JsonString().setValue("inner value 1")).add("inner field 2", new JsonNumber().setValue("2"))
+                        new DbDocImpl().add("inner field 1", new JsonString().setValue("inner value 1")).add("inner field 2", new JsonNumber().setValue("2"))
                                 .add("inner field 3", JsonLiteral.TRUE).add("inner field 4", JsonLiteral.FALSE).add("inner field 5", JsonLiteral.NULL)
-                                .add("inner field 6", new JsonArray()).add("inner field 7", new DbDoc()))
+                                .add("inner field 6", new JsonArray()).add("inner field 7", new DbDocImpl()))
                 .add("field7", new JsonArray().addValue(new JsonString().setValue("arr1")).addValue(new JsonNumber().setValue("3")).addValue(JsonLiteral.TRUE)
-                        .addValue(JsonLiteral.FALSE).addValue(JsonLiteral.NULL).addValue(new JsonArray()).addValue(new DbDoc()));
+                        .addValue(JsonLiteral.FALSE).addValue(JsonLiteral.NULL).addValue(new JsonArray()).addValue(new DbDocImpl()));
+
+        assertEquals("{\"field1\":\"value 1\",\"field2\":1.234544E+26,\"field3\":true,\"field4\":false,\"field5\":null,"
+                + "\"field6\":{\"inner field 1\":\"inner value 1\",\"inner field 2\":2,\"inner field 3\":true,"
+                + "\"inner field 4\":false,\"inner field 5\":null,\"inner field 6\":[],\"inner field 7\":{}},"
+                + "\"field7\":[\"arr1\",3,true,false,null,[],{}]}", doc.toString());
 
         assertEquals("{\n\"field1\" : \"value 1\",\n\"field2\" : 1.234544E+26,\n\"field3\" : true,\n\"field4\" : false,\n\"field5\" : null,\n"
                 + "\"field6\" : {\n\"inner field 1\" : \"inner value 1\",\n\"inner field 2\" : 2,\n\"inner field 3\" : true,\n"
                 + "\"inner field 4\" : false,\n\"inner field 5\" : null,\n\"inner field 6\" : [],\n\"inner field 7\" : {}\n},\n"
-                + "\"field7\" : [\"arr1\", 3, true, false, null, [], {}]\n}", doc.toString());
-
+                + "\"field7\" : [\"arr1\", 3, true, false, null, [], {}]\n}", doc.toFormattedString());
     }
 
     @Test

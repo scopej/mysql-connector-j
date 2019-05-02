@@ -1,65 +1,78 @@
 /*
-  Copyright (c) 2015, 2016, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2015, 2019, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite.x.devapi;
 
+import static org.hamcrest.CoreMatchers.hasItems;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
-import com.mysql.cj.api.xdevapi.Column;
-import com.mysql.cj.api.xdevapi.Row;
-import com.mysql.cj.api.xdevapi.RowResult;
-import com.mysql.cj.api.xdevapi.SelectStatement;
-import com.mysql.cj.api.xdevapi.Table;
-import com.mysql.cj.api.xdevapi.Type;
-import com.mysql.cj.core.exceptions.DataConversionException;
+import com.mysql.cj.CoreSession;
+import com.mysql.cj.ServerVersion;
+import com.mysql.cj.conf.PropertyKey;
+import com.mysql.cj.exceptions.DataConversionException;
+import com.mysql.cj.protocol.x.XProtocol;
+import com.mysql.cj.protocol.x.XProtocolError;
+import com.mysql.cj.xdevapi.Column;
+import com.mysql.cj.xdevapi.Row;
+import com.mysql.cj.xdevapi.RowResult;
+import com.mysql.cj.xdevapi.SelectStatement;
+import com.mysql.cj.xdevapi.Session;
+import com.mysql.cj.xdevapi.SessionFactory;
+import com.mysql.cj.xdevapi.SessionImpl;
+import com.mysql.cj.xdevapi.SqlResult;
+import com.mysql.cj.xdevapi.Statement;
+import com.mysql.cj.xdevapi.Table;
+import com.mysql.cj.xdevapi.Type;
 
 /**
  * @todo
  */
-public class TableSelectTest extends TableTest {
-    @Before
-    @Override
-    public void setupTableTest() {
-        super.setupTableTest();
-    }
-
-    @After
-    @Override
-    public void teardownTableTest() {
-        super.teardownTableTest();
-    }
+public class TableSelectTest extends BaseTableTestCase {
 
     @Test
     public void basicQuery() {
@@ -198,6 +211,10 @@ public class TableSelectTest extends TableTest {
                 .values("a", "ba", "cba", "dcba", "edcba", "fedcba", "gfedcba", "hgfedcba", 0x01, -1).execute();
         table.insert("c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "cb1", "cb2")
                 .values(0xcc, 0xcccc, 0xcccccc, 0xccccccccL, 0xccccccccccL, 0xccccccccccccL, 0xccccccccccccccL, 0xccccccccccccccccL, 0x00, -2).execute();
+
+        String testUrl = this.baseUrl + (this.baseUrl.contains("?") ? "&" : "?") + makeParam(PropertyKey.jdbcCompliantTruncation, "false", true);
+        Session s1 = this.fact.getSession(testUrl);
+        table = s1.getDefaultSchema().getTable("testBug22931433");
 
         RowResult rows = table.select("c1, c2, c3, c4, c5, c6, c7, c8, cb1, cb2").execute();
 
@@ -426,7 +443,7 @@ public class TableSelectTest extends TableTest {
 
         RowResult rows = table.select("*").execute();
         List<Column> metadata = rows.getColumns();
-        assertEquals(4294967295L, metadata.get(0).getLength());
+        // assertEquals(4294967295L, metadata.get(0).getLength()); // irrelevant, we shouldn't expect any concrete value
         assertEquals(4294967295L, metadata.get(1).getLength());
         assertEquals(4294967295L, metadata.get(2).getLength());
 
@@ -459,5 +476,695 @@ public class TableSelectTest extends TableTest {
 
         myCol = metadata.get(2);
         assertEquals(Type.DATETIME, myCol.getType());
+    }
+
+    @Test
+    public void testTableRowLocks() throws Exception {
+        if (!this.isSetForXTests || !mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.3"))) {
+            return;
+        }
+
+        sqlUpdate("drop table if exists testTableRowLocks");
+        sqlUpdate("create table testTableRowLocks (_id varchar(32), a varchar(20))");
+        sqlUpdate("CREATE UNIQUE INDEX myIndex ON testTableRowLocks (_id)"); // index is required to enable row locking
+        sqlUpdate("insert into testTableRowLocks values ('1', '1')");
+        sqlUpdate("insert into testTableRowLocks values ('2', '1')");
+        sqlUpdate("insert into testTableRowLocks values ('3', '1')");
+
+        Session session1 = null;
+        Session session2 = null;
+
+        try {
+            session1 = new SessionFactory().getSession(this.testProperties);
+            Table table1 = session1.getDefaultSchema().getTable("testTableRowLocks");
+            session2 = new SessionFactory().getSession(this.testProperties);
+            Table table2 = session2.getDefaultSchema().getTable("testTableRowLocks");
+
+            // test1: Shared Lock
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockShared().execute();
+
+            session2.startTransaction();
+            table2.select("_id").where("_id = '2'").lockShared().execute(); // should return immediately
+
+            CompletableFuture<RowResult> res1 = table2.select("_id").where("_id = '1'").lockShared().executeAsync(); // should return immediately
+            res1.get(5, TimeUnit.SECONDS);
+            assertTrue(res1.isDone());
+
+            session1.rollback();
+            session2.rollback();
+
+            // test2: Shared Lock after Exclusive
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockExclusive().execute();
+
+            session2.startTransaction();
+            table2.select("_id").where("_id = '2'").lockShared().execute(); // should return immediately
+            CompletableFuture<RowResult> res2 = table2.select("_id").where("_id = '1'").lockShared().executeAsync(); // session2 blocks
+            assertThrows(TimeoutException.class, new Callable<Void>() {
+                public Void call() throws Exception {
+                    res2.get(5, TimeUnit.SECONDS);
+                    return null;
+                }
+            });
+
+            session1.rollback(); // session2 should unblock now
+            res2.get(5, TimeUnit.SECONDS);
+            assertTrue(res2.isDone());
+            session2.rollback();
+
+            // test3: Exclusive after Shared
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockShared().execute();
+            table1.select("_id").where("_id = '3'").lockShared().execute();
+
+            session2.startTransaction();
+            table2.select("_id").where("_id = '2'").lockExclusive().execute(); // should return immediately
+            table2.select("_id").where("_id = '3'").lockShared().execute(); // should return immediately
+            CompletableFuture<RowResult> res3 = table2.select("_id").where("_id = '1'").lockExclusive().executeAsync(); // session2 blocks
+            assertThrows(TimeoutException.class, new Callable<Void>() {
+                public Void call() throws Exception {
+                    res3.get(5, TimeUnit.SECONDS);
+                    return null;
+                }
+            });
+
+            session1.rollback(); // session2 should unblock now
+            res3.get(5, TimeUnit.SECONDS);
+            assertTrue(res3.isDone());
+            session2.rollback();
+
+            // test4: Exclusive after Exclusive
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockExclusive().execute();
+
+            session2.startTransaction();
+            table2.select("_id").where("_id = '2'").lockExclusive().execute(); // should return immediately
+            CompletableFuture<RowResult> res4 = table2.select("_id").where("_id = '1'").lockExclusive().executeAsync(); // session2 blocks
+            assertThrows(TimeoutException.class, new Callable<Void>() {
+                public Void call() throws Exception {
+                    res4.get(5, TimeUnit.SECONDS);
+                    return null;
+                }
+            });
+
+            session1.rollback(); // session2 should unblock now
+            res4.get(5, TimeUnit.SECONDS);
+            assertTrue(res4.isDone());
+            session2.rollback();
+
+        } finally {
+            if (session1 != null) {
+                session1.close();
+            }
+            if (session2 != null) {
+                session2.close();
+            }
+            sqlUpdate("drop table if exists testTableRowLocks");
+        }
+
+    }
+
+    @Test
+    public void testTableRowLockOptions() throws Exception {
+        if (!this.isSetForXTests || !mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.5"))) {
+            return;
+        }
+
+        Function<RowResult, List<String>> asStringList = rr -> rr.fetchAll().stream().map(r -> r.getString(0)).collect(Collectors.toList());
+
+        sqlUpdate("DROP TABLE IF EXISTS testTableRowLockOptions");
+        sqlUpdate("CREATE TABLE testTableRowLockOptions (_id VARCHAR(32), a VARCHAR(20))");
+        sqlUpdate("CREATE UNIQUE INDEX myIndex ON testTableRowLockOptions (_id)"); // index is required to enable row locking
+        sqlUpdate("INSERT INTO testTableRowLockOptions VALUES ('1', '1'), ('2', '1'), ('3', '1')");
+
+        Session session1 = null;
+        Session session2 = null;
+
+        try {
+            session1 = new SessionFactory().getSession(this.testProperties);
+            Table table1 = session1.getDefaultSchema().getTable("testTableRowLockOptions");
+            session2 = new SessionFactory().getSession(this.testProperties);
+            Table table2 = session2.getDefaultSchema().getTable("testTableRowLockOptions");
+            RowResult res;
+            CompletableFuture<RowResult> futRes;
+
+            /*
+             * 1. Shared Lock in both sessions.
+             */
+
+            // session2.lockShared() returns data immediately.
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockShared().execute();
+
+            session2.startTransaction();
+            res = table2.select("_id").where("_id < '3'").lockShared().execute();
+            assertEquals(2, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("1", "2"));
+            session2.rollback();
+
+            session2.startTransaction();
+            futRes = table2.select("_id").where("_id < '3'").lockShared().executeAsync();
+            res = futRes.get(3, TimeUnit.SECONDS);
+            assertTrue(futRes.isDone());
+            assertEquals(2, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("1", "2"));
+            session2.rollback();
+
+            session1.rollback();
+
+            // session2.lockShared(NOWAIT) returns data immediately.
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockShared().execute();
+
+            session2.startTransaction();
+            res = table2.select("_id").where("_id < '3'").lockShared(Statement.LockContention.NOWAIT).execute();
+            assertEquals(2, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("1", "2"));
+            session2.rollback();
+
+            session2.startTransaction();
+            futRes = table2.select("_id").where("_id < '3'").lockShared(Statement.LockContention.NOWAIT).executeAsync();
+            res = futRes.get(3, TimeUnit.SECONDS);
+            assertTrue(futRes.isDone());
+            assertEquals(2, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("1", "2"));
+            session2.rollback();
+
+            session1.rollback();
+
+            // session2.lockShared(SKIP_LOCK) returns data immediately.
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockShared().execute();
+
+            session2.startTransaction();
+            res = table2.select("_id").where("_id < '3'").lockShared(Statement.LockContention.SKIP_LOCKED).execute();
+            assertEquals(2, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("1", "2"));
+            session2.rollback();
+
+            session2.startTransaction();
+            futRes = table2.select("_id").where("_id < '3'").lockShared(Statement.LockContention.SKIP_LOCKED).executeAsync();
+            res = futRes.get(3, TimeUnit.SECONDS);
+            assertTrue(futRes.isDone());
+            assertEquals(2, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("1", "2"));
+            session2.rollback();
+
+            session1.rollback();
+
+            /*
+             * 2. Shared Lock in first session and exclusive lock in second.
+             */
+
+            // session2.lockExclusive() blocks until session1 ends.
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockShared().execute();
+
+            // session2.startTransaction();
+            // res = table2.select("_id").where("_id < '3'").lockExclusive().execute(); (Can't test)
+            // session2.rollback();
+
+            session2.startTransaction();
+            futRes = table2.select("_id").where("_id < '3'").lockExclusive().executeAsync();
+            final CompletableFuture<RowResult> fr1 = futRes;
+            assertThrows(TimeoutException.class, () -> fr1.get(3, TimeUnit.SECONDS));
+
+            session1.rollback(); // Unlocks session2.
+
+            res = futRes.get(3, TimeUnit.SECONDS);
+            assertTrue(futRes.isDone());
+            assertEquals(2, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("1", "2"));
+            session2.rollback();
+
+            // session2.lockExclusive(NOWAIT) should return locking error.
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockShared().execute();
+
+            session2.startTransaction();
+            assertThrows(XProtocolError.class,
+                    "ERROR 3572 \\(HY000\\) Statement aborted because lock\\(s\\) could not be acquired immediately and NOWAIT is set\\.",
+                    () -> table2.select("_id").where("_id < '3'").lockExclusive(Statement.LockContention.NOWAIT).execute());
+            session2.rollback();
+
+            session2.startTransaction();
+            futRes = table2.select("_id").where("_id < '3'").lockExclusive(Statement.LockContention.NOWAIT).executeAsync();
+            final CompletableFuture<RowResult> fr2 = futRes;
+            assertThrows(ExecutionException.class,
+                    ".*XProtocolError: ERROR 3572 \\(HY000\\) Statement aborted because lock\\(s\\) could not be acquired immediately and NOWAIT is set\\.",
+                    () -> fr2.get(3, TimeUnit.SECONDS));
+            session2.rollback();
+
+            session1.rollback();
+
+            // session2.lockExclusive(SKIP_LOCK) should return (unlocked) data immediately.
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockShared().execute();
+
+            session2.startTransaction();
+            res = table2.select("_id").where("_id < '3'").lockExclusive(Statement.LockContention.SKIP_LOCKED).execute();
+            assertEquals(1, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("2"));
+            session2.rollback();
+
+            session2.startTransaction();
+            futRes = table2.select("_id").where("_id < '3'").lockExclusive(Statement.LockContention.SKIP_LOCKED).executeAsync();
+            res = futRes.get(3, TimeUnit.SECONDS);
+            assertTrue(futRes.isDone());
+            assertEquals(1, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("2"));
+            session2.rollback();
+
+            session1.rollback();
+
+            /*
+             * 3. Exclusive Lock in first session and shared lock in second.
+             */
+
+            // session2.lockShared() blocks until session1 ends.
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockExclusive().execute();
+
+            // session2.startTransaction();
+            // res = table2.select("_id").where("_id < '3'").lockShared().execute(); (Can't test)
+            // session2.rollback();
+
+            session2.startTransaction();
+            futRes = table2.select("_id").where("_id < '3'").lockShared().executeAsync();
+            final CompletableFuture<RowResult> fr3 = futRes;
+            assertThrows(TimeoutException.class, () -> fr3.get(3, TimeUnit.SECONDS));
+
+            session1.rollback(); // Unlocks session2.
+
+            res = futRes.get(3, TimeUnit.SECONDS);
+            assertTrue(futRes.isDone());
+            assertEquals(2, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("1", "2"));
+            session2.rollback();
+
+            // session2.lockShared(NOWAIT) should return locking error.
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockExclusive().execute();
+
+            session2.startTransaction();
+            assertThrows(XProtocolError.class,
+                    "ERROR 3572 \\(HY000\\) Statement aborted because lock\\(s\\) could not be acquired immediately and NOWAIT is set\\.",
+                    () -> table2.select("_id").where("_id < '3'").lockShared(Statement.LockContention.NOWAIT).execute());
+            session2.rollback();
+
+            session2.startTransaction();
+            futRes = table2.select("_id").where("_id < '3'").lockShared(Statement.LockContention.NOWAIT).executeAsync();
+            final CompletableFuture<RowResult> fr4 = futRes;
+            assertThrows(ExecutionException.class,
+                    ".*XProtocolError: ERROR 3572 \\(HY000\\) Statement aborted because lock\\(s\\) could not be acquired immediately and NOWAIT is set\\.",
+                    () -> fr4.get(3, TimeUnit.SECONDS));
+            session2.rollback();
+
+            session1.rollback();
+
+            // session2.lockShared(SKIP_LOCK) should return (unlocked) data immediately.
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockExclusive().execute();
+
+            session2.startTransaction();
+            res = table2.select("_id").where("_id < '3'").lockShared(Statement.LockContention.SKIP_LOCKED).execute();
+            assertEquals(1, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("2"));
+            session2.rollback();
+
+            session2.startTransaction();
+            futRes = table2.select("_id").where("_id < '3'").lockShared(Statement.LockContention.SKIP_LOCKED).executeAsync();
+            res = futRes.get(3, TimeUnit.SECONDS);
+            assertTrue(futRes.isDone());
+            assertEquals(1, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("2"));
+            session2.rollback();
+
+            session1.rollback();
+
+            /*
+             * 4. Exclusive Lock in both sessions.
+             */
+
+            // session2.lockExclusive() blocks until session1 ends.
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockExclusive().execute();
+
+            // session2.startTransaction();
+            // res = table2.select("_id").where("_id < '3'").lockExclusive().execute(); (Can't test)
+            // session2.rollback();
+
+            session2.startTransaction();
+            futRes = table2.select("_id").where("_id < '3'").lockExclusive().executeAsync();
+            final CompletableFuture<RowResult> fr5 = futRes;
+            assertThrows(TimeoutException.class, () -> fr5.get(3, TimeUnit.SECONDS));
+
+            session1.rollback(); // Unlocks session2.
+
+            res = futRes.get(3, TimeUnit.SECONDS);
+            assertTrue(futRes.isDone());
+            assertEquals(2, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("1", "2"));
+            session2.rollback();
+
+            // session2.lockExclusive(NOWAIT) should return locking error.
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockExclusive().execute();
+
+            session2.startTransaction();
+            assertThrows(XProtocolError.class,
+                    "ERROR 3572 \\(HY000\\) Statement aborted because lock\\(s\\) could not be acquired immediately and NOWAIT is set\\.",
+                    () -> table2.select("_id").where("_id < '3'").lockExclusive(Statement.LockContention.NOWAIT).execute());
+            session2.rollback();
+
+            session2.startTransaction();
+            futRes = table2.select("_id").where("_id < '3'").lockExclusive(Statement.LockContention.NOWAIT).executeAsync();
+            final CompletableFuture<RowResult> fr6 = futRes;
+            assertThrows(ExecutionException.class,
+                    ".*XProtocolError: ERROR 3572 \\(HY000\\) Statement aborted because lock\\(s\\) could not be acquired immediately and NOWAIT is set\\.",
+                    () -> fr6.get(3, TimeUnit.SECONDS));
+            session2.rollback();
+
+            session1.rollback();
+
+            // session2.lockExclusive(SKIP_LOCK) should return (unlocked) data immediately.
+            session1.startTransaction();
+            table1.select("_id").where("_id = '1'").lockExclusive().execute();
+
+            session2.startTransaction();
+            res = table2.select("_id").where("_id < '3'").lockExclusive(Statement.LockContention.SKIP_LOCKED).execute();
+            assertEquals(1, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("2"));
+            session2.rollback();
+
+            session2.startTransaction();
+            futRes = table2.select("_id").where("_id < '3'").lockExclusive(Statement.LockContention.SKIP_LOCKED).executeAsync();
+            res = futRes.get(3, TimeUnit.SECONDS);
+            assertTrue(futRes.isDone());
+            assertEquals(1, asStringList.apply(res).size());
+            assertThat(asStringList.apply(res), hasItems("2"));
+            session2.rollback();
+
+            session1.rollback();
+        } finally {
+            if (session1 != null) {
+                session1.close();
+            }
+            if (session2 != null) {
+                session2.close();
+            }
+            sqlUpdate("DROP TABLE IF EXISTS testTableRowLockOptions");
+        }
+    }
+
+    /**
+     * Tests fix for Bug#22038729, X DEVAPI: ANY API CALL AFTER A FAILED CALL PROC() RESULTS IN HANG
+     * and for duplicate Bug#25575010, X DEVAPI: ANY API CALL AFTER A FAILED SELECT RESULTS IN HANG
+     */
+    @Test
+    public void testBug22038729() throws Exception {
+        if (!this.isSetForXTests) {
+            return;
+        }
+
+        final Field pf = CoreSession.class.getDeclaredField("protocol");
+        pf.setAccessible(true);
+
+        try {
+            sqlUpdate("drop table if exists testBug22038729");
+            sqlUpdate("create table testBug22038729 (c1 int, c2 int unsigned, id bigint)");
+            sqlUpdate("insert into testBug22038729 values(10, 100, -9223372036854775808)");
+            sqlUpdate("insert into testBug22038729 values(11, 11, 9223372036854775806)");
+
+            sqlUpdate("drop procedure if exists testBug22038729p");
+            sqlUpdate("create procedure testBug22038729p (in p1 int,IN p2 char(20)) begin select -10;select id+1000 from testBug22038729; end;");
+
+            // XProtocol.readRowOrNull()
+            Session sess = new SessionFactory().getSession(this.testProperties);
+            Table t1 = sess.getDefaultSchema().getTable("testBug22038729");
+            RowResult rows = t1.select("c1-c2").orderBy("c1 DESC").execute();
+            assertTrue(rows.hasNext());
+            Row r = rows.next();
+            assertEquals(0, r.getInt(0));
+            assertThrows(XProtocolError.class, "ERROR 1690 \\(22003\\) BIGINT UNSIGNED value is out of range .*", () -> rows.hasNext());
+            sess.close(); // It was hanging
+
+            // XProtocol.readRowOrNull()
+            sess = new SessionFactory().getSession(this.testProperties);
+            SqlResult rs1 = sess.sql("select c1-c2 from testBug22038729 order by c1 desc").execute();
+            assertEquals(0, rs1.fetchOne().getInt(0));
+            assertThrows(XProtocolError.class, "ERROR 1690 \\(22003\\) BIGINT UNSIGNED value is out of range .*", () -> rs1.fetchOne());
+            sess.close(); // It was hanging
+
+            // XProtocol.drainRows()
+            sess = new SessionFactory().getSession(this.testProperties);
+            sess.sql("select c1-c2 from testBug22038729 order by c1 desc").execute();
+            XProtocol xp = (XProtocol) pf.get(((SessionImpl) sess).getSession());
+            assertThrows(XProtocolError.class, "ERROR 1690 \\(22003\\) BIGINT UNSIGNED value is out of range .*", () -> {
+                xp.drainRows();
+                return xp;
+            });
+            sess.close(); // It was hanging
+
+            sess = new SessionFactory().getSession(this.testProperties);
+            SqlResult rs2 = sess.sql("call testBug22038729p(?, ?)").bind(10).bind("X").execute();
+            assertTrue(rs2.hasData());
+            assertTrue(rs2.hasNext());
+            r = rs2.next();
+            assertEquals(-10, r.getInt(0));
+            assertFalse(rs2.hasNext());
+            assertTrue(rs2.nextResult());
+            assertTrue(rs2.hasData());
+            assertTrue(rs2.hasNext());
+            r = rs2.next();
+            assertEquals(-9223372036854774808L, r.getLong(0));
+            assertThrows(XProtocolError.class, "ERROR 1690 \\(22003\\) BIGINT value is out of range .*", () -> rs2.hasNext());
+            sess.close(); // It was hanging
+
+        } finally {
+            sqlUpdate("drop table if exists testBug22038729");
+            sqlUpdate("drop procedure if exists testBug22038729p");
+        }
+    }
+
+    @Test
+    public void testPreparedStatements() {
+        if (!this.isSetForXTests || !mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.14"))) {
+            return;
+        }
+
+        try {
+            // Prepare test data.
+            sqlUpdate("DROP TABLE IF EXISTS testPrepareSelect");
+            sqlUpdate("CREATE TABLE testPrepareSelect (id INT PRIMARY KEY, ord INT)");
+            sqlUpdate("INSERT INTO testPrepareSelect VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8)");
+
+            SessionFactory sf = new SessionFactory();
+            /*
+             * Test common usage.
+             */
+            Session testSession = sf.getSession(this.testProperties);
+
+            int sessionThreadId = getThreadId(testSession);
+            assertPreparedStatementsCount(sessionThreadId, 0, 1);
+            assertPreparedStatementsStatusCounts(testSession, 0, 0, 0);
+
+            Table testTbl = testSession.getDefaultSchema().getTable("testPrepareSelect");
+
+            // Initialize several SelectStatement objects.
+            SelectStatement testSelect1 = testTbl.select("ord"); // Select all.
+            SelectStatement testSelect2 = testTbl.select("ord").where("ord >= :n"); // Criteria with one placeholder.
+            SelectStatement testSelect3 = testTbl.select("ord").where("ord >= :n AND ord <= :n + 3"); // Criteria with same placeholder repeated.
+            SelectStatement testSelect4 = testTbl.select("ord").where("ord >= :n AND ord <= :m"); // Criteria with multiple placeholders.
+
+            assertPreparedStatementsCountsAndId(testSession, 0, testSelect1, 0, -1);
+            assertPreparedStatementsCountsAndId(testSession, 0, testSelect2, 0, -1);
+            assertPreparedStatementsCountsAndId(testSession, 0, testSelect3, 0, -1);
+            assertPreparedStatementsCountsAndId(testSession, 0, testSelect4, 0, -1);
+
+            assertPreparedStatementsStatusCounts(testSession, 0, 0, 0);
+
+            // A. Set binds: 1st execute -> non-prepared.
+            assertTestPreparedStatementsResult(testSelect1.execute(), 1, 8);
+            assertPreparedStatementsCountsAndId(testSession, 0, testSelect1, 0, -1);
+            assertTestPreparedStatementsResult(testSelect2.bind("n", 2).execute(), 2, 8);
+            assertPreparedStatementsCountsAndId(testSession, 0, testSelect2, 0, -1);
+            assertTestPreparedStatementsResult(testSelect3.bind("n", 2).execute(), 2, 5);
+            assertPreparedStatementsCountsAndId(testSession, 0, testSelect3, 0, -1);
+            assertTestPreparedStatementsResult(testSelect4.bind("n", 2).bind("m", 5).execute(), 2, 5);
+            assertPreparedStatementsCountsAndId(testSession, 0, testSelect4, 0, -1);
+
+            assertPreparedStatementsStatusCounts(testSession, 0, 0, 0);
+
+            // B. Set orderBy resets execution count: 1st execute -> non-prepared.
+            assertTestPreparedStatementsResult(testSelect1.orderBy("id").execute(), 1, 8);
+            assertPreparedStatementsCountsAndId(testSession, 0, testSelect1, 0, -1);
+            assertTestPreparedStatementsResult(testSelect2.orderBy("id").execute(), 2, 8);
+            assertPreparedStatementsCountsAndId(testSession, 0, testSelect2, 0, -1);
+            assertTestPreparedStatementsResult(testSelect3.orderBy("id").execute(), 2, 5);
+            assertPreparedStatementsCountsAndId(testSession, 0, testSelect3, 0, -1);
+            assertTestPreparedStatementsResult(testSelect4.orderBy("id").execute(), 2, 5);
+            assertPreparedStatementsCountsAndId(testSession, 0, testSelect4, 0, -1);
+
+            assertPreparedStatementsStatusCounts(testSession, 0, 0, 0);
+
+            // C. Set binds reuse statement: 2nd execute -> prepare + execute.
+            assertTestPreparedStatementsResult(testSelect1.execute(), 1, 8);
+            assertPreparedStatementsCountsAndId(testSession, 1, testSelect1, 1, 1);
+            assertTestPreparedStatementsResult(testSelect2.bind("n", 3).execute(), 3, 8);
+            assertPreparedStatementsCountsAndId(testSession, 2, testSelect2, 2, 1);
+            assertTestPreparedStatementsResult(testSelect3.bind("n", 3).execute(), 3, 6);
+            assertPreparedStatementsCountsAndId(testSession, 3, testSelect3, 3, 1);
+            assertTestPreparedStatementsResult(testSelect4.bind("m", 6).execute(), 2, 6);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect4, 4, 1);
+
+            assertPreparedStatementsStatusCounts(testSession, 4, 4, 0);
+
+            // D. Set binds reuse statement: 3rd execute -> execute.
+            assertTestPreparedStatementsResult(testSelect1.execute(), 1, 8);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect1, 1, 2);
+            assertTestPreparedStatementsResult(testSelect2.bind("n", 4).execute(), 4, 8);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect2, 2, 2);
+            assertTestPreparedStatementsResult(testSelect3.bind("n", 4).execute(), 4, 7);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect3, 3, 2);
+            assertTestPreparedStatementsResult(testSelect4.bind("n", 3).bind("m", 7).execute(), 3, 7);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect4, 4, 2);
+
+            assertPreparedStatementsStatusCounts(testSession, 4, 8, 0);
+
+            // E. Set where deallocates and resets execution count: 1st execute -> deallocate + non-prepared.
+            assertTestPreparedStatementsResult(testSelect1.where("true").execute(), 1, 8);
+            assertPreparedStatementsCountsAndId(testSession, 3, testSelect1, 0, -1);
+            assertTestPreparedStatementsResult(testSelect2.where("true AND ord >= :n").bind("n", 4).execute(), 4, 8);
+            assertPreparedStatementsCountsAndId(testSession, 2, testSelect2, 0, -1);
+            assertTestPreparedStatementsResult(testSelect3.where("true AND ord >= :n AND ord <= :n + 3").bind("n", 4).execute(), 4, 7);
+            assertPreparedStatementsCountsAndId(testSession, 1, testSelect3, 0, -1);
+            assertTestPreparedStatementsResult(testSelect4.where("true AND ord >= :n AND ord <= :m").bind("n", 3).bind("m", 7).execute(), 3, 7);
+            assertPreparedStatementsCountsAndId(testSession, 0, testSelect4, 0, -1);
+
+            assertPreparedStatementsStatusCounts(testSession, 4, 8, 4);
+
+            // F. No Changes: 2nd execute -> prepare + execute.
+            assertTestPreparedStatementsResult(testSelect1.execute(), 1, 8);
+            assertPreparedStatementsCountsAndId(testSession, 1, testSelect1, 1, 1);
+            assertTestPreparedStatementsResult(testSelect2.bind("n", 4).execute(), 4, 8);
+            assertPreparedStatementsCountsAndId(testSession, 2, testSelect2, 2, 1);
+            assertTestPreparedStatementsResult(testSelect3.bind("n", 4).execute(), 4, 7);
+            assertPreparedStatementsCountsAndId(testSession, 3, testSelect3, 3, 1);
+            assertTestPreparedStatementsResult(testSelect4.bind("n", 3).bind("m", 7).execute(), 3, 7);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect4, 4, 1);
+
+            assertPreparedStatementsStatusCounts(testSession, 8, 12, 4);
+
+            // G. Set limit for the first time deallocates and re-prepares: 1st execute -> re-prepare + execute.
+            assertTestPreparedStatementsResult(testSelect1.limit(2).execute(), 1, 2);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect1, 1, 1);
+            assertTestPreparedStatementsResult(testSelect2.limit(2).execute(), 4, 5);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect2, 2, 1);
+            assertTestPreparedStatementsResult(testSelect3.limit(2).execute(), 4, 5);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect3, 3, 1);
+            assertTestPreparedStatementsResult(testSelect4.limit(2).execute(), 3, 4);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect4, 4, 1);
+
+            assertPreparedStatementsStatusCounts(testSession, 12, 16, 8);
+
+            // H. Set limit and offset reuse prepared statement: 2nd execute -> execute.
+            assertTestPreparedStatementsResult(testSelect1.limit(1).offset(1).execute(), 2, 2);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect1, 1, 2);
+            assertTestPreparedStatementsResult(testSelect2.limit(1).offset(1).execute(), 5, 5);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect2, 2, 2);
+            assertTestPreparedStatementsResult(testSelect3.limit(1).offset(1).execute(), 5, 5);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect3, 3, 2);
+            assertTestPreparedStatementsResult(testSelect4.limit(1).offset(1).execute(), 4, 4);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect4, 4, 2);
+
+            assertPreparedStatementsStatusCounts(testSession, 12, 20, 8);
+
+            // I. Set orderBy deallocates and resets execution count, set limit and bind has no effect: 1st execute -> deallocate + non-prepared.
+            assertTestPreparedStatementsResult(testSelect1.orderBy("id").limit(2).execute(), 2, 3);
+            assertPreparedStatementsCountsAndId(testSession, 3, testSelect1, 0, -1);
+            assertTestPreparedStatementsResult(testSelect2.orderBy("id").limit(2).bind("n", 4).execute(), 5, 6);
+            assertPreparedStatementsCountsAndId(testSession, 2, testSelect2, 0, -1);
+            assertTestPreparedStatementsResult(testSelect3.orderBy("id").limit(2).bind("n", 4).execute(), 5, 6);
+            assertPreparedStatementsCountsAndId(testSession, 1, testSelect3, 0, -1);
+            assertTestPreparedStatementsResult(testSelect4.orderBy("id").limit(2).bind("m", 7).execute(), 4, 5);
+            assertPreparedStatementsCountsAndId(testSession, 0, testSelect4, 0, -1);
+
+            assertPreparedStatementsStatusCounts(testSession, 12, 20, 12);
+
+            // J. Set offset reuse statement: 2nd execute -> prepare + execute.
+            assertTestPreparedStatementsResult(testSelect1.offset(0).execute(), 1, 2);
+            assertPreparedStatementsCountsAndId(testSession, 1, testSelect1, 1, 1);
+            assertTestPreparedStatementsResult(testSelect2.offset(0).execute(), 4, 5);
+            assertPreparedStatementsCountsAndId(testSession, 2, testSelect2, 2, 1);
+            assertTestPreparedStatementsResult(testSelect3.offset(0).execute(), 4, 5);
+            assertPreparedStatementsCountsAndId(testSession, 3, testSelect3, 3, 1);
+            assertTestPreparedStatementsResult(testSelect4.offset(0).execute(), 3, 4);
+            assertPreparedStatementsCountsAndId(testSession, 4, testSelect4, 4, 1);
+
+            assertPreparedStatementsStatusCounts(testSession, 16, 24, 12);
+
+            testSession.close();
+            assertPreparedStatementsCount(sessionThreadId, 0, 10); // Prepared statements won't live past the closing of the session.
+
+            /*
+             * Test falling back onto non-prepared statements.
+             */
+            testSession = sf.getSession(this.testProperties);
+            int origMaxPrepStmtCount = this.session.sql("SELECT @@max_prepared_stmt_count").execute().fetchOne().getInt(0);
+
+            try {
+                // Allow preparing only one more statement.
+                this.session.sql("SET GLOBAL max_prepared_stmt_count = ?").bind(getPreparedStatementsCount() + 1).execute();
+
+                sessionThreadId = getThreadId(testSession);
+                assertPreparedStatementsCount(sessionThreadId, 0, 1);
+                assertPreparedStatementsStatusCounts(testSession, 0, 0, 0);
+
+                testTbl = testSession.getDefaultSchema().getTable("testPrepareSelect");
+
+                testSelect1 = testTbl.select("ord");
+                testSelect2 = testTbl.select("ord");
+
+                // 1st execute -> don't prepare.
+                assertTestPreparedStatementsResult(testSelect1.execute(), 1, 8);
+                assertPreparedStatementsCountsAndId(testSession, 0, testSelect1, 0, -1);
+                assertTestPreparedStatementsResult(testSelect2.execute(), 1, 8);
+                assertPreparedStatementsCountsAndId(testSession, 0, testSelect2, 0, -1);
+
+                assertPreparedStatementsStatusCounts(testSession, 0, 0, 0);
+
+                // 2nd execute -> prepare + execute.
+                assertTestPreparedStatementsResult(testSelect1.execute(), 1, 8);
+                assertPreparedStatementsCountsAndId(testSession, 1, testSelect1, 1, 1);
+                assertTestPreparedStatementsResult(testSelect2.execute(), 1, 8); // Fails preparing, execute as non-prepared.
+                assertPreparedStatementsCountsAndId(testSession, 1, testSelect2, 0, -1);
+
+                assertPreparedStatementsStatusCounts(testSession, 2, 1, 0); // Failed prepare also counts.
+
+                // 3rd execute -> execute.
+                assertTestPreparedStatementsResult(testSelect1.execute(), 1, 8);
+                assertPreparedStatementsCountsAndId(testSession, 1, testSelect1, 1, 2);
+                assertTestPreparedStatementsResult(testSelect2.execute(), 1, 8); // Execute as non-prepared.
+                assertPreparedStatementsCountsAndId(testSession, 1, testSelect2, 0, -1);
+
+                assertPreparedStatementsStatusCounts(testSession, 2, 2, 0);
+
+                testSession.close();
+                assertPreparedStatementsCount(sessionThreadId, 0, 10); // Prepared statements won't live past the closing of the session.
+            } finally {
+                this.session.sql("SET GLOBAL max_prepared_stmt_count = ?").bind(origMaxPrepStmtCount).execute();
+            }
+        } finally {
+            sqlUpdate("DROP TABLE IF EXISTS testPrepareSelect");
+        }
+    }
+
+    private void assertTestPreparedStatementsResult(RowResult res, int expectedMin, int expectedMax) {
+        for (Row r : res.fetchAll()) {
+            assertEquals(expectedMin++, r.getInt("ord"));
+        }
+        assertEquals(expectedMax, expectedMin - 1);
     }
 }

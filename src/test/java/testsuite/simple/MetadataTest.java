@@ -1,28 +1,35 @@
 /*
-  Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2002, 2019, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite.simple;
 
+import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
@@ -30,14 +37,26 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.function.Supplier;
 
-import com.mysql.cj.core.conf.PropertyDefinitions;
-import com.mysql.cj.core.util.StringUtils;
+import com.mysql.cj.Query;
+import com.mysql.cj.ServerVersion;
+import com.mysql.cj.conf.PropertyDefinitions;
+import com.mysql.cj.conf.PropertyKey;
+import com.mysql.cj.jdbc.DatabaseMetaDataUsingInfoSchema;
+import com.mysql.cj.jdbc.JdbcConnection;
+import com.mysql.cj.protocol.Resultset;
+import com.mysql.cj.util.StringUtils;
 
+import testsuite.BaseQueryInterceptor;
 import testsuite.BaseTestCase;
 
 /**
@@ -112,8 +131,14 @@ public class MetadataTest extends BaseTestCase {
             assertEquals(pkTableName, "cpd_foreign_3");
             assertEquals(fkColumnName, "cpd_foreign_1_id");
             assertEquals(fkTableName, "cpd_foreign_4");
-            assertEquals(deleteAction, "NO ACTION");
             assertEquals(updateAction, "CASCADE");
+
+            // "SHOW CREATE TABLE" without using I_S missed the "ON DELETE" rule until MySQL 8.0.14. With I_S all worked fine. 
+            if (versionMeetsMinimum(8, 0, 14) || dbmd instanceof DatabaseMetaDataUsingInfoSchema) {
+                assertEquals(deleteAction, "RESTRICT");
+            } else {
+                assertEquals(deleteAction, "NO ACTION");
+            }
 
             this.rs.close();
             this.rs = null;
@@ -365,8 +390,8 @@ public class MetadataTest extends BaseTestCase {
         this.stmt.executeUpdate("INSERT INTO " + tableName + " VALUES (1)");
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_tinyInt1isBit, "true");
-        props.setProperty(PropertyDefinitions.PNAME_transformedBitIsBoolean, "true");
+        props.setProperty(PropertyKey.tinyInt1isBit.getKeyName(), "true");
+        props.setProperty(PropertyKey.transformedBitIsBoolean.getKeyName(), "true");
         Connection boolConn = getConnectionWithProps(props);
 
         this.rs = boolConn.createStatement().executeQuery("SELECT field1 FROM " + tableName);
@@ -383,8 +408,8 @@ public class MetadataTest extends BaseTestCase {
         assertEquals("BOOLEAN", this.rs.getString("TYPE_NAME"));
 
         props.clear();
-        props.setProperty(PropertyDefinitions.PNAME_transformedBitIsBoolean, "false");
-        props.setProperty(PropertyDefinitions.PNAME_tinyInt1isBit, "true");
+        props.setProperty(PropertyKey.transformedBitIsBoolean.getKeyName(), "false");
+        props.setProperty(PropertyKey.tinyInt1isBit.getKeyName(), "true");
 
         Connection bitConn = getConnectionWithProps(props);
 
@@ -415,13 +440,59 @@ public class MetadataTest extends BaseTestCase {
         assertEquals("java.lang.Boolean", this.rs.getMetaData().getColumnClassName(1));
     }
 
+    public void testResultSetMetaDataMethods() throws Exception {
+        createTable("t1",
+                "(c1 char(1) CHARACTER SET latin7 COLLATE latin7_general_cs, c2 char(10) CHARACTER SET latin7 COLLATE latin7_general_ci, g1 GEOMETRY)");
+
+        this.rs = this.stmt.executeQuery("SELECT c1 as QQQ, c2, g1 FROM t1");
+
+        assertThrows(SQLException.class, "Column index out of range.", new Callable<Void>() {
+            @SuppressWarnings("synthetic-access")
+            @Override
+            public Void call() throws Exception {
+                MetadataTest.this.rs.getMetaData().getColumnType(0);
+                return null;
+            }
+        });
+        assertThrows(SQLException.class, "Column index out of range.", new Callable<Void>() {
+            @SuppressWarnings("synthetic-access")
+            @Override
+            public Void call() throws Exception {
+                MetadataTest.this.rs.getMetaData().getColumnType(100);
+                return null;
+            }
+        });
+
+        assertEquals(Types.CHAR, this.rs.getMetaData().getColumnType(1));
+        assertEquals("ISO-8859-13", ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterEncoding(1));
+        assertEquals("latin7", ((com.mysql.cj.jdbc.result.ResultSetMetaData) this.rs.getMetaData()).getColumnCharacterSet(1));
+        assertEquals("QQQ", this.rs.getMetaData().getColumnLabel(1));
+        assertEquals("c1", this.rs.getMetaData().getColumnName(1));
+        assertTrue(this.rs.getMetaData().isCaseSensitive(1));
+        assertFalse(this.rs.getMetaData().isCaseSensitive(2));
+        assertTrue(this.rs.getMetaData().isCaseSensitive(3));
+        assertFalse(this.rs.getMetaData().isCurrency(3));
+        assertTrue(this.rs.getMetaData().isDefinitelyWritable(3));
+
+        assertEquals(0, this.rs.getMetaData().getScale(1));
+
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.useOldAliasMetadataBehavior.getKeyName(), "true");
+        Connection con = getConnectionWithProps(props);
+
+        this.rs = con.createStatement().executeQuery("SELECT c1 as QQQ, g1 FROM t1");
+        assertEquals("QQQ", this.rs.getMetaData().getColumnLabel(1));
+        assertEquals("QQQ", this.rs.getMetaData().getColumnName(1));
+
+    }
+
     /**
      * Tests the implementation of Information Schema for primary keys.
      */
     public void testGetPrimaryKeysUsingInfoShcema() throws Exception {
         createTable("t1", "(c1 int(1) primary key)");
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useInformationSchema, "true");
+        props.setProperty(PropertyKey.useInformationSchema.getKeyName(), "true");
         Connection conn1 = null;
         try {
             conn1 = getConnectionWithProps(props);
@@ -468,9 +539,8 @@ public class MetadataTest extends BaseTestCase {
     public void testGetColumnsUsingInfoSchema() throws Exception {
         createTable("t1", "(c1 char(1))");
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useInformationSchema, "true");
-        props.setProperty(PropertyDefinitions.PNAME_nullNamePatternMatchesAll, "true");
-        props.setProperty(PropertyDefinitions.PNAME_nullCatalogMeansCurrent, "true");
+        props.setProperty(PropertyKey.useInformationSchema.getKeyName(), "true");
+        props.setProperty(PropertyKey.nullCatalogMeansCurrent.getKeyName(), "true");
         Connection conn1 = null;
         try {
             conn1 = getConnectionWithProps(props);
@@ -499,7 +569,7 @@ public class MetadataTest extends BaseTestCase {
         tableNames.add("t1-1");
         tableNames.add("t1-2");
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useInformationSchema, "true");
+        props.setProperty(PropertyKey.useInformationSchema.getKeyName(), "true");
         Connection conn1 = null;
         try {
             conn1 = getConnectionWithProps(props);
@@ -525,9 +595,8 @@ public class MetadataTest extends BaseTestCase {
         if (!runTestIfSysPropDefined(PropertyDefinitions.SYSP_testsuite_cantGrant)) {
             Properties props = new Properties();
 
-            props.setProperty(PropertyDefinitions.PNAME_useInformationSchema, "true");
-            props.setProperty(PropertyDefinitions.PNAME_nullNamePatternMatchesAll, "true");
-            props.setProperty(PropertyDefinitions.PNAME_nullCatalogMeansCurrent, "true");
+            props.setProperty(PropertyKey.useInformationSchema.getKeyName(), "true");
+            props.setProperty(PropertyKey.nullCatalogMeansCurrent.getKeyName(), "true");
             Connection conn1 = null;
             Statement stmt1 = null;
             String userHostQuoted = null;
@@ -592,7 +661,7 @@ public class MetadataTest extends BaseTestCase {
     public void testGetProceduresUsingInfoSchema() throws Exception {
         createProcedure("sp1", "()\n BEGIN\nSELECT 1;end\n");
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useInformationSchema, "true");
+        props.setProperty(PropertyKey.useInformationSchema.getKeyName(), "true");
         Connection conn1 = null;
         try {
             conn1 = getConnectionWithProps(props);
@@ -618,7 +687,7 @@ public class MetadataTest extends BaseTestCase {
         this.stmt.executeUpdate(
                 "CREATE TABLE child(id INT, parent_id INT, " + "FOREIGN KEY (parent_id) REFERENCES parent(id) ON DELETE SET NULL) ENGINE=INNODB");
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useInformationSchema, "true");
+        props.setProperty(PropertyKey.useInformationSchema.getKeyName(), "true");
         Connection conn1 = null;
         try {
             conn1 = getConnectionWithProps(props);
@@ -648,7 +717,7 @@ public class MetadataTest extends BaseTestCase {
         this.stmt.executeUpdate(
                 "CREATE TABLE child(id INT, parent_id INT, " + "FOREIGN KEY (parent_id) REFERENCES parent(id) ON DELETE SET NULL) ENGINE=INNODB");
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useInformationSchema, "true");
+        props.setProperty(PropertyKey.useInformationSchema.getKeyName(), "true");
         Connection conn1 = null;
         try {
             conn1 = getConnectionWithProps(props);
@@ -678,7 +747,7 @@ public class MetadataTest extends BaseTestCase {
         this.stmt.executeUpdate(
                 "CREATE TABLE child(id INT, parent_id INT, " + "FOREIGN KEY (parent_id) REFERENCES parent(id) ON DELETE SET NULL) ENGINE=INNODB");
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useInformationSchema, "true");
+        props.setProperty(PropertyKey.useInformationSchema.getKeyName(), "true");
         Connection conn1 = null;
         try {
             conn1 = getConnectionWithProps(props);
@@ -712,11 +781,10 @@ public class MetadataTest extends BaseTestCase {
         }
 
         // Test GENERATED columns syntax.
-        createTable("pythagorean_triple",
-                "(side_a DOUBLE NULL, side_b DOUBLE NULL, "
-                        + "side_c_vir DOUBLE AS (SQRT(side_a * side_a + side_b * side_b)) VIRTUAL UNIQUE KEY COMMENT 'hypotenuse - virtual', "
-                        + "side_c_sto DOUBLE GENERATED ALWAYS AS (SQRT(POW(side_a, 2) + POW(side_b, 2))) STORED UNIQUE KEY COMMENT 'hypotenuse - stored' NOT NULL "
-                        + "PRIMARY KEY)");
+        createTable("pythagorean_triple", "(side_a DOUBLE NULL, side_b DOUBLE NULL, "
+                + "side_c_vir DOUBLE AS (SQRT(side_a * side_a + side_b * side_b)) VIRTUAL UNIQUE KEY COMMENT 'hypotenuse - virtual', "
+                + "side_c_sto DOUBLE GENERATED ALWAYS AS (SQRT(POW(side_a, 2) + POW(side_b, 2))) STORED UNIQUE KEY COMMENT 'hypotenuse - stored' NOT NULL "
+                + "PRIMARY KEY)");
 
         // Test data for generated columns.
         assertEquals(1, this.stmt.executeUpdate("INSERT INTO pythagorean_triple (side_a, side_b) VALUES (3, 4)"));
@@ -733,11 +801,11 @@ public class MetadataTest extends BaseTestCase {
         assertFalse(this.rs.next());
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_nullCatalogMeansCurrent, "true");
+        props.setProperty(PropertyKey.nullCatalogMeansCurrent.getKeyName(), "true");
 
         for (String useIS : new String[] { "false", "true" }) {
             Connection testConn = null;
-            props.setProperty(PropertyDefinitions.PNAME_useInformationSchema, useIS);
+            props.setProperty(PropertyKey.useInformationSchema.getKeyName(), useIS);
 
             testConn = getConnectionWithProps(props);
             DatabaseMetaData dbmd = testConn.getMetaData();
@@ -789,6 +857,122 @@ public class MetadataTest extends BaseTestCase {
             assertFalse(test, this.rs.next());
 
             testConn.close();
+        }
+    }
+
+    /**
+     * Tests DatabaseMetaData.getSQLKeywords().
+     * (Related to BUG#70701 - DatabaseMetaData.getSQLKeywords() doesn't match MySQL 5.6 reserved words)
+     * 
+     * This test checks the statically maintained keywords list.
+     */
+    public void testGetSqlKeywordsStatic() throws Exception {
+        final String mysqlKeywords = "ACCESSIBLE,ADD,ANALYZE,ASC,BEFORE,CASCADE,CHANGE,CONTINUE,DATABASE,DATABASES,DAY_HOUR,DAY_MICROSECOND,DAY_MINUTE,"
+                + "DAY_SECOND,DELAYED,DESC,DISTINCTROW,DIV,DUAL,ELSEIF,EMPTY,ENCLOSED,ESCAPED,EXIT,EXPLAIN,FIRST_VALUE,FLOAT4,FLOAT8,FORCE,FULLTEXT,GENERATED,"
+                + "GROUPS,HIGH_PRIORITY,HOUR_MICROSECOND,HOUR_MINUTE,HOUR_SECOND,IF,IGNORE,INDEX,INFILE,INT1,INT2,INT3,INT4,INT8,IO_AFTER_GTIDS,"
+                + "IO_BEFORE_GTIDS,ITERATE,JSON_TABLE,KEY,KEYS,KILL,LAG,LAST_VALUE,LEAD,LEAVE,LIMIT,LINEAR,LINES,LOAD,LOCK,LONG,LONGBLOB,LONGTEXT,LOOP,"
+                + "LOW_PRIORITY,MASTER_BIND,MASTER_SSL_VERIFY_SERVER_CERT,MAXVALUE,MEDIUMBLOB,MEDIUMINT,MEDIUMTEXT,MIDDLEINT,MINUTE_MICROSECOND,MINUTE_SECOND,"
+                + "NO_WRITE_TO_BINLOG,NTH_VALUE,NTILE,OPTIMIZE,OPTIMIZER_COSTS,OPTION,OPTIONALLY,OUTFILE,PERSIST,PERSIST_ONLY,PURGE,READ,READ_WRITE,REGEXP,"
+                + "RENAME,REPEAT,REPLACE,REQUIRE,RESIGNAL,RESTRICT,RLIKE,SCHEMA,SCHEMAS,SECOND_MICROSECOND,SEPARATOR,SHOW,SIGNAL,SPATIAL,SQL_BIG_RESULT,"
+                + "SQL_CALC_FOUND_ROWS,SQL_SMALL_RESULT,SSL,STARTING,STORED,STRAIGHT_JOIN,TERMINATED,TINYBLOB,TINYINT,TINYTEXT,UNDO,UNLOCK,UNSIGNED,USAGE,USE,"
+                + "UTC_DATE,UTC_TIME,UTC_TIMESTAMP,VARBINARY,VARCHARACTER,VIRTUAL,WHILE,WRITE,XOR,YEAR_MONTH,ZEROFILL";
+
+        if (!versionMeetsMinimum(8, 0, 11)) {
+            Connection testConn = getConnectionWithProps("useInformationSchema=true");
+            assertEquals("MySQL keywords don't match expected.", mysqlKeywords, testConn.getMetaData().getSQLKeywords());
+            testConn.close();
+        }
+
+        Connection testConn = getConnectionWithProps("useInformationSchema=false"); // Required for MySQL 8.0.11 and above, otherwise returns dynamic keywords.
+        assertEquals("MySQL keywords don't match expected.", mysqlKeywords, testConn.getMetaData().getSQLKeywords());
+        testConn.close();
+    }
+
+    /**
+     * Tests DatabaseMetaData.getSQLKeywords().
+     * WL#10544, Update MySQL 8.0 keywords list.
+     * 
+     * This test checks the dynamically maintained keywords lists.
+     */
+    public void testGetSqlKeywordsDynamic() throws Exception {
+        if (!versionMeetsMinimum(8, 0, 11)) {
+            // Tested in testGetSqlKeywordsStatic();
+            return;
+        }
+
+        /*
+         * Setup test case.
+         */
+        // 1. Get list of SQL:2003 to exclude.
+        Field dbmdSql2003Keywords = com.mysql.cj.jdbc.DatabaseMetaData.class.getDeclaredField("SQL2003_KEYWORDS");
+        dbmdSql2003Keywords.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<String> sql2003ReservedWords = Collections.unmodifiableList((List<String>) dbmdSql2003Keywords.get(null));
+        assertTrue("Failed to get field SQL2003_KEYWORDS from com.mysql.cj.jdbc.DatabaseMetaData",
+                sql2003ReservedWords != null && !sql2003ReservedWords.isEmpty());
+
+        // 2. Retrieve list of reserved words from server.
+        final String keywordsQuery = "SELECT WORD FROM INFORMATION_SCHEMA.KEYWORDS WHERE RESERVED=1 ORDER BY WORD";
+        List<String> mysqlReservedWords = new ArrayList<>();
+        this.rs = this.stmt.executeQuery(keywordsQuery);
+        while (this.rs.next()) {
+            mysqlReservedWords.add(this.rs.getString(1));
+        }
+        assertTrue("Failed to retrieve reserved words from server.", !mysqlReservedWords.isEmpty());
+
+        // 3. Find the difference mysqlReservedWords - sql2003ReservedWords and prepare the expected result.
+        mysqlReservedWords.removeAll(sql2003ReservedWords);
+        String expectedSqlKeywords = String.join(",", mysqlReservedWords);
+
+        // Make sure the keywords cache is empty in DatabaseMetaDataUsingInfoSchema.
+        Field dbmduisKeywordsCacheField = DatabaseMetaDataUsingInfoSchema.class.getDeclaredField("keywordsCache");
+        dbmduisKeywordsCacheField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<ServerVersion, String> dbmduisKeywordsCache = (Map<ServerVersion, String>) dbmduisKeywordsCacheField.get(null);
+        assertNotNull("Failed to retrieve the field keywordsCache from com.mysql.cj.jdbc.DatabaseMetaDataUsingInfoSchema.", dbmduisKeywordsCache);
+        dbmduisKeywordsCache.clear();
+        assertTrue("Failed to clear the DatabaseMetaDataUsingInfoSchema keywords cache.", dbmduisKeywordsCache.isEmpty());
+
+        /*
+         * Check that keywords are retrieved from database and cached.
+         */
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.useInformationSchema.getKeyName(), "true");
+        props.setProperty(PropertyKey.queryInterceptors.getKeyName(), TestGetSqlKeywordsDynamicQueryInterceptor.class.getName());
+
+        // First call to DatabaseMetaData.getSQLKeywords() -> keywords are retrieved from database.
+        Connection testConn = getConnectionWithProps(props);
+        assertEquals("MySQL keywords don't match expected.", expectedSqlKeywords, testConn.getMetaData().getSQLKeywords());
+        assertTrue("MySQL keywords weren't obtained from database.", TestGetSqlKeywordsDynamicQueryInterceptor.interceptedQueries.contains(keywordsQuery));
+        assertTrue("Keywords for current server weren't properly cached.", dbmduisKeywordsCache.containsKey(((JdbcConnection) testConn).getServerVersion()));
+
+        TestGetSqlKeywordsDynamicQueryInterceptor.interceptedQueries.clear();
+
+        // Second call to DatabaseMetaData.getSQLKeywords(), using same connection -> keywords are retrieved from internal cache.
+        assertEquals("MySQL keywords don't match expected.", expectedSqlKeywords, testConn.getMetaData().getSQLKeywords());
+        assertFalse("MySQL keywords weren't obtained from cache.", TestGetSqlKeywordsDynamicQueryInterceptor.interceptedQueries.contains(keywordsQuery));
+        assertTrue("Keywords for current server weren't properly cached.", dbmduisKeywordsCache.containsKey(((JdbcConnection) testConn).getServerVersion()));
+        testConn.close();
+
+        TestGetSqlKeywordsDynamicQueryInterceptor.interceptedQueries.clear();
+
+        // Third call to DatabaseMetaData.getSQLKeywords(), using different connection -> keywords are retrieved from internal cache.
+        testConn = getConnectionWithProps(props);
+        assertEquals("MySQL keywords don't match expected.", expectedSqlKeywords, testConn.getMetaData().getSQLKeywords());
+        assertFalse("MySQL keywords weren't obtained from cache.", TestGetSqlKeywordsDynamicQueryInterceptor.interceptedQueries.contains(keywordsQuery));
+        assertTrue("Keywords for current server weren't properly cached.", dbmduisKeywordsCache.containsKey(((JdbcConnection) testConn).getServerVersion()));
+        testConn.close();
+
+        TestGetSqlKeywordsDynamicQueryInterceptor.interceptedQueries.clear();
+    }
+
+    public static class TestGetSqlKeywordsDynamicQueryInterceptor extends BaseQueryInterceptor {
+        public static List<String> interceptedQueries = new ArrayList<>();
+
+        @Override
+        public <T extends Resultset> T preProcess(Supplier<String> sql, Query interceptedQuery) {
+            interceptedQueries.add(sql.get());
+            return super.preProcess(sql, interceptedQuery);
         }
     }
 }

@@ -1,24 +1,30 @@
 /*
-  Copyright (c) 2015, 2017, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2015, 2018, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite.x.devapi;
@@ -34,36 +40,25 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-import com.mysql.cj.api.xdevapi.AddResult;
-import com.mysql.cj.api.xdevapi.Collection;
-import com.mysql.cj.api.xdevapi.DocResult;
-import com.mysql.cj.api.xdevapi.Row;
-import com.mysql.cj.api.xdevapi.SqlResult;
-import com.mysql.cj.api.xdevapi.Table;
-import com.mysql.cj.core.exceptions.MysqlErrorNumbers;
-import com.mysql.cj.x.core.XDevAPIError;
+import com.mysql.cj.ServerVersion;
+import com.mysql.cj.exceptions.MysqlErrorNumbers;
+import com.mysql.cj.protocol.x.XProtocolError;
+import com.mysql.cj.xdevapi.AddResult;
+import com.mysql.cj.xdevapi.Collection;
 import com.mysql.cj.xdevapi.DbDoc;
+import com.mysql.cj.xdevapi.DocResult;
 import com.mysql.cj.xdevapi.JsonNumber;
 import com.mysql.cj.xdevapi.JsonString;
+import com.mysql.cj.xdevapi.Row;
+import com.mysql.cj.xdevapi.Session;
+import com.mysql.cj.xdevapi.SessionFactory;
+import com.mysql.cj.xdevapi.SqlResult;
 
 @Category(testsuite.x.AsyncTests.class)
-public class AsyncQueryTest extends CollectionTest {
-    @Before
-    @Override
-    public void setupCollectionTest() {
-        super.setupCollectionTest();
-    }
-
-    @After
-    @Override
-    public void teardownCollectionTest() {
-        super.teardownCollectionTest();
-    }
+public class AsyncQueryTest extends BaseCollectionTestCase {
 
     @Test
     public void basicAsyncQuery() throws Exception {
@@ -71,9 +66,15 @@ public class AsyncQueryTest extends CollectionTest {
             return;
         }
         String json = "{'firstName':'Frank', 'middleName':'Lloyd', 'lastName':'Wright'}".replaceAll("'", "\"");
+        if (!mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.5"))) {
+            json = json.replace("{", "{\"_id\": \"1\", "); // Inject an _id.
+        }
         AddResult res = this.collection.add(json).execute();
-        assertTrue(res.getDocumentIds().get(0).matches("[a-f0-9]{32}"));
-        assertTrue(res.getDocumentId().matches("[a-f0-9]{32}"));
+        if (mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.5"))) {
+            assertTrue(res.getGeneratedIds().get(0).matches("[a-f0-9]{28}"));
+        } else {
+            assertEquals(0, res.getGeneratedIds().size());
+        }
 
         CompletableFuture<DocResult> docsF = this.collection.find("firstName like '%Fra%'").executeAsync();
         DocResult docs = docsF.get();
@@ -87,53 +88,49 @@ public class AsyncQueryTest extends CollectionTest {
         if (!this.isSetForXTests) {
             return;
         }
-        final int NUMBER_OF_QUERIES = 50;
+        final int NUMBER_OF_QUERIES = 1000;
+        Session sess = new SessionFactory().getSession(this.baseUrl);
+        Collection coll = sess.getSchema(this.schema.getName()).getCollection(this.collection.getName());
 
-        String json = "{'firstName':'Frank', 'middleName':'Lloyd', 'lastName':'Wright'}".replaceAll("'", "\"");
-        AddResult res = this.collection.add(json).execute();
-        assertTrue(res.getDocumentIds().get(0).matches("[a-f0-9]{32}"));
-        assertTrue(res.getDocumentId().matches("[a-f0-9]{32}"));
+        String json1 = "{'mode': 'sync'}".replaceAll("'", "\"");
+        String json2 = "{'mode': 'async'}".replaceAll("'", "\"");
+        if (!mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.5"))) {
+            // Inject an _id.
+            json1 = json1.replace("{", "{\"_id\": \"1\", ");
+            json2 = json2.replace("{", "{\"_id\": \"2\", ");
+        }
+        AddResult res = coll.add(json1).add(json2).execute();
+        if (mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.5"))) {
+            assertTrue(res.getGeneratedIds().get(0).matches("[a-f0-9]{28}"));
+            assertTrue(res.getGeneratedIds().get(1).matches("[a-f0-9]{28}"));
+        } else {
+            assertEquals(0, res.getGeneratedIds().size());
+        }
 
         List<CompletableFuture<DocResult>> futures = new ArrayList<>();
         for (int i = 0; i < NUMBER_OF_QUERIES; ++i) {
-            futures.add(this.collection.find("firstName like '%Fra%'").executeAsync());
+            if (i % 5 == 0) {
+                //System.out.println("\nfutures.add(CompletableFuture.completedFuture(coll.find(\"mode = 'sync'\").execute()));");
+                futures.add(CompletableFuture.completedFuture(coll.find("mode = 'sync'").execute()));
+            } else {
+                //System.out.println("\nfutures.add(coll.find(\"mode = 'async'\").executeAsync());");
+                futures.add(coll.find("mode = 'async'").executeAsync());
+            }
         }
 
         for (int i = 0; i < NUMBER_OF_QUERIES; ++i) {
-            DocResult docs = futures.get(i).get();
-            DbDoc d = docs.next();
-            JsonString val = (JsonString) d.get("lastName");
-            assertEquals("Wright", val.getString());
-        }
-    }
-
-    @Test
-    public void basicRowWiseAsync() throws Exception {
-        if (!this.isSetForXTests) {
-            return;
-        }
-        sqlUpdate("drop table if exists rowwise");
-        sqlUpdate("create table rowwise (age int)");
-        sqlUpdate("insert into rowwise values (1), (1), (1)");
-
-        Table table = this.schema.getTable("rowwise");
-        CompletableFuture<Integer> sumF = table.select("age").executeAsync(1, (Integer r, Row row) -> r + row.getInt("age"));
-        assertEquals(new Integer(4), sumF.get());
-    }
-
-    @Test
-    public void syntaxErrorRowWise() throws Exception {
-        if (!this.isSetForXTests) {
-            return;
-        }
-        CompletableFuture<Integer> res = this.collection.find("NON_EXISTING_FUNCTION()").executeAsync(1, (acc, doc) -> 1);
-        try {
-            res.get();
-            fail("Should fail due to non existing function");
-        } catch (ExecutionException ex) {
-            Throwable cause = ex.getCause();
-            assertEquals(XDevAPIError.class, cause.getClass());
-            assertEquals(MysqlErrorNumbers.ER_SP_DOES_NOT_EXIST, ((XDevAPIError) cause).getErrorCode());
+            try {
+                DocResult docs = futures.get(i).get();
+                DbDoc d = docs.next();
+                JsonString mode = (JsonString) d.get("mode");
+                if (i % 5 == 0) {
+                    assertEquals("i = " + i, "sync", mode.getString());
+                } else {
+                    assertEquals("i = " + i, "async", mode.getString());
+                }
+            } catch (Throwable t) {
+                throw new Exception("Error on i = " + i, t);
+            }
         }
     }
 
@@ -148,8 +145,8 @@ public class AsyncQueryTest extends CollectionTest {
             fail("Should fail due to non existing function");
         } catch (ExecutionException ex) {
             Throwable cause = ex.getCause();
-            assertEquals(XDevAPIError.class, cause.getClass());
-            assertEquals(MysqlErrorNumbers.ER_SP_DOES_NOT_EXIST, ((XDevAPIError) cause).getErrorCode());
+            assertEquals(XProtocolError.class, cause.getClass());
+            assertEquals(MysqlErrorNumbers.ER_SP_DOES_NOT_EXIST, ((XProtocolError) cause).getErrorCode());
         }
     }
 
@@ -159,10 +156,16 @@ public class AsyncQueryTest extends CollectionTest {
             return;
         }
         String json = "{'firstName':'Frank', 'middleName':'Lloyd', 'lastName':'Wright'}".replaceAll("'", "\"");
+        if (!mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.5"))) {
+            json = json.replace("{", "{\"_id\": \"1\", "); // Inject an _id.
+        }
         CompletableFuture<AddResult> resF = this.collection.add(json).executeAsync();
         CompletableFuture<DocResult> docF = resF.thenCompose((AddResult res) -> {
-            assertTrue(res.getDocumentIds().get(0).matches("[a-f0-9]{32}"));
-            assertTrue(res.getDocumentId().matches("[a-f0-9]{32}"));
+            if (mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.5"))) {
+                assertTrue(res.getGeneratedIds().get(0).matches("[a-f0-9]{28}"));
+            } else {
+                assertEquals(0, res.getGeneratedIds().size());
+            }
             return this.collection.find("firstName like '%Fra%'").executeAsync();
         });
 
@@ -178,6 +181,9 @@ public class AsyncQueryTest extends CollectionTest {
         }
         // we guarantee serial execution
         String json = "{'n':1}".replaceAll("'", "\"");
+        if (!mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.5"))) {
+            json = json.replace("{", "{\"_id\": \"1\", "); // Inject an _id.
+        }
         this.collection.add(json).execute();
 
         @SuppressWarnings("rawtypes")
@@ -250,7 +256,7 @@ public class AsyncQueryTest extends CollectionTest {
         if (!this.isSetForXTests) {
             return;
         }
-        int MANY = 100000;
+        int MANY = 10;//100000;
         Collection coll = this.collection;
         List<CompletableFuture<DocResult>> futures = new ArrayList<>();
         for (int i = 0; i < MANY; ++i) {
@@ -268,21 +274,25 @@ public class AsyncQueryTest extends CollectionTest {
             //System.out.println("++++ Read " + i + " set " + i % 3 + " +++++");
             if (i % 3 == 0) {
                 //Expect Success and check F1  is like  %Field%-5
+                System.out.println("\nExpect Success and check F1  is like  %Field%-5");
                 docs = futures.get(i).get();
                 assertFalse(docs.hasNext());
+                System.out.println(docs.fetchOne());
             } else if (i % 3 == 1) {
                 try {
                     //Expecting Error FUNCTION test.NON_EXISTING_FUNCTION does not exist
                     docs = futures.get(i).get();
                     fail("Expected error");
                 } catch (ExecutionException ex) {
-                    XDevAPIError err = (XDevAPIError) ex.getCause();
+                    XProtocolError err = (XProtocolError) ex.getCause();
                     assertEquals(MysqlErrorNumbers.ER_SP_DOES_NOT_EXIST, err.getErrorCode());
                 }
             } else {
                 //Expect Success and check F3 is 106
+                System.out.println("\nExpect Success and check F3 is 106");
                 docs = futures.get(i).get();
                 assertFalse(docs.hasNext());
+                System.out.println(docs.fetchOne());
             }
         }
         System.out.println("Done.");

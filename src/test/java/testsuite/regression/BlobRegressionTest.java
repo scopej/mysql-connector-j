@@ -1,24 +1,30 @@
 /*
-  Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2002, 2019, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite.regression;
@@ -37,7 +43,7 @@ import java.sql.Statement;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 
-import com.mysql.cj.core.conf.PropertyDefinitions;
+import com.mysql.cj.conf.PropertyKey;
 
 import testsuite.BaseTestCase;
 
@@ -208,7 +214,7 @@ public class BlobRegressionTest extends BaseTestCase {
         int dataSize = 256;
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_emulateLocators, "true");
+        props.setProperty(PropertyKey.emulateLocators.getKeyName(), "true");
         Connection locatorConn = getConnectionWithProps(props);
 
         String select = "SELECT ID, 'DATA' AS BLOB_DATA FROM testBug8096 WHERE ID = ?";
@@ -301,7 +307,7 @@ public class BlobRegressionTest extends BaseTestCase {
 
         this.pstmt = this.conn.prepareStatement("INSERT INTO " +
 
-        tableName + " VALUES (?)");
+                tableName + " VALUES (?)");
         this.pstmt.setCharacterStream(1, new StringReader(""), 0);
         this.pstmt.executeUpdate();
 
@@ -384,12 +390,14 @@ public class BlobRegressionTest extends BaseTestCase {
         });
 
         // check with wrong substring index
-        assertThrows(SQLException.class, "String index out of range: 12", new Callable<Void>() {
+        Throwable t = assertThrows(SQLException.class, new Callable<Void>() {
             public Void call() throws Exception {
                 c1.setString(1, s1, 8, 4);
                 return null;
             }
         });
+
+        assertTrue(StringIndexOutOfBoundsException.class.isAssignableFrom(t.getCause().getClass()));
 
         // full replace
         c1.setString(1, s1, 3, 4);
@@ -421,7 +429,7 @@ public class BlobRegressionTest extends BaseTestCase {
         this.pstmt.executeUpdate();
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_enablePacketDebug, "true");
+        props.setProperty(PropertyKey.enablePacketDebug.getKeyName(), "true");
         Connection con = getConnectionWithProps(props);
 
         for (int i = 0; i < 100; i++) {

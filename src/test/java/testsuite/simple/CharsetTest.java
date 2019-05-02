@@ -1,24 +1,30 @@
 /*
-  Copyright (c) 2005, 2017, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2005, 2018, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite.simple;
@@ -39,8 +45,8 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.SortedMap;
 
-import com.mysql.cj.core.CharsetMapping;
-import com.mysql.cj.core.conf.PropertyDefinitions;
+import com.mysql.cj.CharsetMapping;
+import com.mysql.cj.conf.PropertyKey;
 
 import testsuite.BaseTestCase;
 
@@ -62,7 +68,7 @@ public class CharsetTest extends BaseTestCase {
         }
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_characterEncoding, "WINDOWS-31J");
+        props.setProperty(PropertyKey.characterEncoding.getKeyName(), "WINDOWS-31J");
         getConnectionWithProps(props).close();
     }
 
@@ -79,7 +85,7 @@ public class CharsetTest extends BaseTestCase {
 
         Properties props = new Properties();
 
-        props.setProperty(PropertyDefinitions.PNAME_characterEncoding, "EUC_JP_Solaris");
+        props.setProperty(PropertyKey.characterEncoding.getKeyName(), "EUC_JP_Solaris");
 
         Connection conn2 = getConnectionWithProps(props);
         Statement stmt2 = conn2.createStatement();
@@ -94,7 +100,7 @@ public class CharsetTest extends BaseTestCase {
         stmt2.close();
         conn2.close();
 
-        props.setProperty(PropertyDefinitions.PNAME_characterSetResults, "EUC_JP_Solaris");
+        props.setProperty(PropertyKey.characterSetResults.getKeyName(), "EUC_JP_Solaris");
         conn2 = getConnectionWithProps(props);
         stmt2 = this.conn.createStatement();
 
@@ -159,19 +165,19 @@ public class CharsetTest extends BaseTestCase {
             return;
         }
 
-        Map<String, char[]> testDataMap = new HashMap<String, char[]>();
+        Map<String, char[]> testDataMap = new HashMap<>();
 
-        List<String> charsetList = new ArrayList<String>();
+        List<String> charsetList = new ArrayList<>();
 
-        Map<String, Connection> connectionMap = new HashMap<String, Connection>();
+        Map<String, Connection> connectionMap = new HashMap<>();
 
-        Map<String, Connection> connectionWithResultMap = new HashMap<String, Connection>();
+        Map<String, Connection> connectionWithResultMap = new HashMap<>();
 
-        Map<String, Statement> statementMap = new HashMap<String, Statement>();
+        Map<String, Statement> statementMap = new HashMap<>();
 
-        Map<String, Statement> statementWithResultMap = new HashMap<String, Statement>();
+        Map<String, Statement> statementWithResultMap = new HashMap<>();
 
-        Map<String, String> javaToMysqlCharsetMap = new HashMap<String, String>();
+        Map<String, String> javaToMysqlCharsetMap = new HashMap<>();
 
         charsetList.add("SJIS");
         testDataMap.put("SJIS", SJIS_CHARS);
@@ -206,12 +212,12 @@ public class CharsetTest extends BaseTestCase {
         for (String charset : charsetList) {
             Properties props = new Properties();
 
-            props.setProperty(PropertyDefinitions.PNAME_characterEncoding, charset);
+            props.setProperty(PropertyKey.characterEncoding.getKeyName(), charset);
             Connection conn2 = getConnectionWithProps(props);
             connectionMap.put(charset.toLowerCase(Locale.ENGLISH), conn2);
             statementMap.put(charset.toLowerCase(Locale.ENGLISH), conn2.createStatement());
 
-            props.setProperty(PropertyDefinitions.PNAME_characterSetResults, charset);
+            props.setProperty(PropertyKey.characterSetResults.getKeyName(), charset);
             Connection connWithResult = getConnectionWithProps(props);
             connectionWithResultMap.put(charset, connWithResult);
             statementWithResultMap.put(charset, connWithResult.createStatement());
@@ -339,7 +345,7 @@ public class CharsetTest extends BaseTestCase {
                 { "823398318233973582339A3882348A32", "\u4460\u445A\u447B\u48C8" }, { "8134D5318134D6328134D832", "\u1817\u1822\u1836" },
                 { "4A7320204B82339A35646566", "Js  K\u4478def" }, { "8130883281308833", "\u00CE\u00CF" }, { "E05FE06A777682339230", "\u90F7\u9107wv\u4423" },
                 { "814081418139FE30", "\u4E02\u4E04\u3499" }, { "81308130FEFE", "\u0080\uE4C5" }, { "E3329A35E3329A34", "\uDBFF\uDFFF\uDBFF\uDFFE" } };
-        HashMap<String, String> expected = new HashMap<String, String>();
+        HashMap<String, String> expected = new HashMap<>();
 
         // check variables
         Connection con = getConnectionWithProps("characterEncoding=GB18030");

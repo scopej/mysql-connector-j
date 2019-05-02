@@ -1,24 +1,30 @@
 /*
-  Copyright (c) 2015, 2016, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2015, 2018, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite.simple;
@@ -27,13 +33,14 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
-import com.mysql.cj.api.jdbc.JdbcConnection;
-import com.mysql.cj.core.conf.PropertyDefinitions;
+import com.mysql.cj.conf.PropertyKey;
+import com.mysql.cj.jdbc.JdbcConnection;
 
 import testsuite.BaseTestCase;
 import testsuite.UnreliableSocketFactory;
@@ -42,6 +49,8 @@ public class MultiHostConnectionTest extends BaseTestCase {
     private static final String HOST_1 = "host1";
     private static final String HOST_2 = "host2";
     private static final String HOST_3 = "host3";
+    private static final String HOST_4 = "host4";
+    private static final String HOST_5 = "host5";
 
     private static final String HOST_1_OK = UnreliableSocketFactory.getHostConnectedStatus(HOST_1);
     private static final String HOST_1_FAIL = UnreliableSocketFactory.getHostFailedStatus(HOST_1);
@@ -49,6 +58,10 @@ public class MultiHostConnectionTest extends BaseTestCase {
     private static final String HOST_2_FAIL = UnreliableSocketFactory.getHostFailedStatus(HOST_2);
     private static final String HOST_3_OK = UnreliableSocketFactory.getHostConnectedStatus(HOST_3);
     private static final String HOST_3_FAIL = UnreliableSocketFactory.getHostFailedStatus(HOST_3);
+    private static final String HOST_4_OK = UnreliableSocketFactory.getHostConnectedStatus(HOST_4);
+    private static final String HOST_4_FAIL = UnreliableSocketFactory.getHostFailedStatus(HOST_4);
+    private static final String HOST_5_OK = UnreliableSocketFactory.getHostConnectedStatus(HOST_5);
+    //private static final String HOST_5_FAIL = UnreliableSocketFactory.getHostFailedStatus(HOST_5);
 
     private static final String STMT_CLOSED_ERR_PATTERN = "No operations allowed after statement closed.";
     private static final String COMM_LINK_ERR_PATTERN = "(?s)Communications link failure.*";
@@ -146,7 +159,7 @@ public class MultiHostConnectionTest extends BaseTestCase {
         final String allDownURL = testURL.toString();
 
         final Properties testConnProps = getHostFreePropertiesFromTestsuiteUrl();
-        testConnProps.setProperty(PropertyDefinitions.PNAME_retriesAllDown, "2");
+        testConnProps.setProperty(PropertyKey.retriesAllDown.getKeyName(), "2");
 
         // all hosts down
         assertThrows(SQLException.class, COMM_LINK_ERR_PATTERN, new Callable<Void>() {
@@ -234,7 +247,7 @@ public class MultiHostConnectionTest extends BaseTestCase {
     private void testFailoverTransition(String fromHost, String toHost, Set<String> downedHosts, String recoverHost, String... expectedConnectionsHistory)
             throws Exception {
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_retriesAllDown, "2");
+        props.setProperty(PropertyKey.retriesAllDown.getKeyName(), "2");
 
         String fromHostOk = UnreliableSocketFactory.STATUS_CONNECTED + fromHost;
         String toHostOk = UnreliableSocketFactory.STATUS_CONNECTED + toHost;
@@ -300,7 +313,7 @@ public class MultiHostConnectionTest extends BaseTestCase {
      */
     public void testFailoverDefaultSettings() throws Exception {
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_retriesAllDown, "2");
+        props.setProperty(PropertyKey.retriesAllDown.getKeyName(), "2");
 
         Connection testConn = getUnreliableFailoverConnection(new String[] { HOST_1, HOST_2, HOST_3 }, props);
         Statement testStmt1 = null, testStmt2 = null;
@@ -427,7 +440,7 @@ public class MultiHostConnectionTest extends BaseTestCase {
      */
     public void testFailoverCombinations() throws Exception {
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_retriesAllDown, "2");
+        props.setProperty(PropertyKey.retriesAllDown.getKeyName(), "2");
 
         for (int run = 1; run <= 3; run++) {
             Connection testConn = getUnreliableFailoverConnection(new String[] { HOST_1, HOST_2, HOST_3 }, props);
@@ -582,10 +595,10 @@ public class MultiHostConnectionTest extends BaseTestCase {
         downedHosts.add(HOST_1);
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_retriesAllDown, "2");
+        props.setProperty(PropertyKey.retriesAllDown.getKeyName(), "2");
 
         for (boolean foReadOnly : new boolean[] { true, false }) {
-            props.setProperty(PropertyDefinitions.PNAME_failOverReadOnly, Boolean.toString(foReadOnly));
+            props.setProperty(PropertyKey.failOverReadOnly.getKeyName(), Boolean.toString(foReadOnly));
 
             Connection testConn = getUnreliableFailoverConnection(new String[] { HOST_1, HOST_2, HOST_3 }, props, downedHosts);
             Statement testStmt = null;
@@ -681,13 +694,13 @@ public class MultiHostConnectionTest extends BaseTestCase {
      */
     public void testFailoverQueriesBeforeRetryMaster() throws Exception {
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_retriesAllDown, "2");
+        props.setProperty(PropertyKey.retriesAllDown.getKeyName(), "2");
 
         for (boolean setQueriesBeforeRetryMaster : new boolean[] { true, false }) {
             if (setQueriesBeforeRetryMaster) {
-                props.setProperty(PropertyDefinitions.PNAME_queriesBeforeRetryMaster, "10");
+                props.setProperty(PropertyKey.queriesBeforeRetryMaster.getKeyName(), "10");
             } else {
-                props.remove(PropertyDefinitions.PNAME_queriesBeforeRetryMaster); // default 50
+                props.remove(PropertyKey.queriesBeforeRetryMaster.getKeyName()); // default 50
             }
 
             Connection testConn = getUnreliableFailoverConnection(new String[] { HOST_1, HOST_2, HOST_3 }, props);
@@ -765,13 +778,13 @@ public class MultiHostConnectionTest extends BaseTestCase {
      */
     public void testFailoverSecondsBeforeRetryMaster() throws Exception {
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_retriesAllDown, "2");
+        props.setProperty(PropertyKey.retriesAllDown.getKeyName(), "2");
 
         for (boolean setSecondsBeforeRetryMaster : new boolean[] { true, false }) {
             if (setSecondsBeforeRetryMaster) {
-                props.setProperty(PropertyDefinitions.PNAME_secondsBeforeRetryMaster, "1");
+                props.setProperty(PropertyKey.secondsBeforeRetryMaster.getKeyName(), "1");
             } else {
-                props.remove(PropertyDefinitions.PNAME_secondsBeforeRetryMaster); // default 50
+                props.remove(PropertyKey.secondsBeforeRetryMaster.getKeyName()); // default 50
             }
 
             Connection testConn = getUnreliableFailoverConnection(new String[] { HOST_1, HOST_2, HOST_3 }, props);
@@ -866,11 +879,11 @@ public class MultiHostConnectionTest extends BaseTestCase {
         downedHosts.add(HOST_3);
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_retriesAllDown, "2");
+        props.setProperty(PropertyKey.retriesAllDown.getKeyName(), "2");
 
         // test fall back on ('queriesBeforeRetryMaster' > 0 || 'secondsBeforeRetryMaster' > 0)
-        props.setProperty(PropertyDefinitions.PNAME_queriesBeforeRetryMaster, "10");
-        props.setProperty(PropertyDefinitions.PNAME_secondsBeforeRetryMaster, "1");
+        props.setProperty(PropertyKey.queriesBeforeRetryMaster.getKeyName(), "10");
+        props.setProperty(PropertyKey.secondsBeforeRetryMaster.getKeyName(), "1");
 
         for (boolean autoCommit : new boolean[] { true, false }) {
             Connection testConn = getUnreliableFailoverConnection(new String[] { HOST_1, HOST_2, HOST_3 }, props, downedHosts);
@@ -943,8 +956,8 @@ public class MultiHostConnectionTest extends BaseTestCase {
         }
 
         // test fall back off ('queriesBeforeRetryMaster' = 0 && 'secondsBeforeRetryMaster' = 0)
-        props.setProperty(PropertyDefinitions.PNAME_queriesBeforeRetryMaster, "0");
-        props.setProperty(PropertyDefinitions.PNAME_secondsBeforeRetryMaster, "0");
+        props.setProperty(PropertyKey.queriesBeforeRetryMaster.getKeyName(), "0");
+        props.setProperty(PropertyKey.secondsBeforeRetryMaster.getKeyName(), "0");
 
         for (boolean autoCommit : new boolean[] { true, false }) {
             Connection testConn = getUnreliableFailoverConnection(new String[] { HOST_1, HOST_2, HOST_3 }, props, downedHosts);
@@ -1025,12 +1038,12 @@ public class MultiHostConnectionTest extends BaseTestCase {
         downedHosts.add(HOST_2);
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_retriesAllDown, "2");
-        props.setProperty(PropertyDefinitions.PNAME_maxReconnects, "2");
-        props.setProperty(PropertyDefinitions.PNAME_initialTimeout, "1");
+        props.setProperty(PropertyKey.retriesAllDown.getKeyName(), "2");
+        props.setProperty(PropertyKey.maxReconnects.getKeyName(), "2");
+        props.setProperty(PropertyKey.initialTimeout.getKeyName(), "1");
 
         for (boolean foAutoReconnect : new boolean[] { true, false }) {
-            props.setProperty(PropertyDefinitions.PNAME_autoReconnect, Boolean.toString(foAutoReconnect));
+            props.setProperty(PropertyKey.autoReconnect.getKeyName(), Boolean.toString(foAutoReconnect));
 
             Connection testConn = getUnreliableFailoverConnection(new String[] { HOST_1, HOST_2, HOST_3 }, props, downedHosts);
             Statement testStmt1 = null, testStmt2 = null;
@@ -1155,8 +1168,8 @@ public class MultiHostConnectionTest extends BaseTestCase {
         downedHosts.add(HOST_3);
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_retriesAllDown, "2");
-        props.setProperty(PropertyDefinitions.PNAME_failOverReadOnly, "false");
+        props.setProperty(PropertyKey.retriesAllDown.getKeyName(), "2");
+        props.setProperty(PropertyKey.failOverReadOnly.getKeyName(), "false");
 
         JdbcConnection testConn = (JdbcConnection) getUnreliableFailoverConnection(new String[] { HOST_1, HOST_2, HOST_3 }, props, downedHosts);
         Statement testStmt = null;
@@ -1260,5 +1273,88 @@ public class MultiHostConnectionTest extends BaseTestCase {
             }
             testConn.close();
         }
+    }
+
+    /**
+     * Tests "serverAffinity" load-balancing strategy.
+     */
+    public void testLoadBalanceServerAffinityStrategy() throws Exception {
+        final String port = mainConnectionUrl.getMainHost().getPort() + "";
+
+        final String[] hosts = new String[] { HOST_1, HOST_2, HOST_3, HOST_4, HOST_5 };
+        final Properties props = new Properties();
+        props.setProperty(PropertyKey.ha_loadBalanceStrategy.getKeyName(), "serverAffinity");
+        props.setProperty(PropertyKey.retriesAllDown.getKeyName(), "2");
+        props.setProperty(PropertyKey.maxReconnects.getKeyName(), "2");
+        props.setProperty(PropertyKey.initialTimeout.getKeyName(), "1");
+        props.setProperty(PropertyKey.autoReconnect.getKeyName(), "true");
+
+        /*
+         * Connect to the highest affinity, single, host.
+         */
+        for (String host : hosts) {
+            props.setProperty(PropertyKey.serverAffinityOrder.getKeyName(), host + ":" + port);
+
+            final Connection testConn = getUnreliableLoadBalancedConnection(hosts, props);
+            testConn.close();
+            assertConnectionsHistory(UnreliableSocketFactory.getHostConnectedStatus(host));
+        }
+
+        /*
+         * Connect to the second most highest affinity host and fall back to first as soon as possible.
+         */
+        props.setProperty(PropertyKey.serverAffinityOrder.getKeyName(), HOST_2 + ":" + port + "," + HOST_4 + ":" + port + "," + HOST_5 + ":" + port);
+
+        Connection testConn = getUnreliableLoadBalancedConnection(hosts, props, new HashSet<>(Arrays.asList(HOST_1, HOST_2)));
+        testConn.setAutoCommit(false);
+        assertConnectionsHistory(HOST_2_FAIL, HOST_2_FAIL, HOST_4_OK);
+
+        testConn.commit(); // Retries HOST2 but fails. Ends up reusing the active HOST4 connection.
+        assertConnectionsHistory(HOST_2_FAIL, HOST_2_FAIL, HOST_4_OK, HOST_2_FAIL, HOST_2_FAIL);
+        this.rs = testConn.createStatement().executeQuery("SELECT 1");
+        assertTrue(this.rs.next());
+        assertEquals(1, this.rs.getInt(1));
+        assertEquals(HOST_4, ((JdbcConnection) testConn).getHost());
+
+        UnreliableSocketFactory.dontDownHost(HOST_2);
+        testConn.commit(); // Retries HOST2 and succeeds.
+        assertConnectionsHistory(HOST_2_FAIL, HOST_2_FAIL, HOST_4_OK, HOST_2_FAIL, HOST_2_FAIL, HOST_2_OK);
+
+        testConn.close();
+
+        /*
+         * Connect to a random host when all affinity hosts are down, then fall back to one of the affinity hosts when its back on.
+         */
+        props.setProperty(PropertyKey.serverAffinityOrder.getKeyName(), HOST_2 + ":" + port + "," + HOST_4 + ":" + port);
+        props.setProperty(PropertyKey.loadBalanceBlacklistTimeout.getKeyName(), "2000"); // Turn on blacklisting to avoid retrying the affinity hosts.
+
+        testConn = getUnreliableLoadBalancedConnection(hosts, props, new HashSet<>(Arrays.asList(HOST_1, HOST_2, HOST_4)));
+        testConn.setAutoCommit(false);
+        assertEquals(HOST_2_FAIL, UnreliableSocketFactory.getHostsFromAllConnections().get(0));
+        assertEquals(HOST_2_FAIL, UnreliableSocketFactory.getHostsFromAllConnections().get(1));
+        assertEquals(HOST_4_FAIL, UnreliableSocketFactory.getHostsFromAllConnections().get(2));
+        assertEquals(HOST_4_FAIL, UnreliableSocketFactory.getHostsFromAllConnections().get(3));
+        assertTrue(
+                UnreliableSocketFactory.getHostFromLastConnection().equals(HOST_3_OK) || UnreliableSocketFactory.getHostFromLastConnection().equals(HOST_5_OK));
+
+        Thread.sleep(2100); // Allow the blacklisted hosts to be retried.
+
+        UnreliableSocketFactory.dontDownHost(HOST_4);
+        testConn.commit();
+        assertConnectionsHistory(HOST_2_FAIL, HOST_2_FAIL, HOST_4_OK); // Check the expected last events only.
+
+        testConn.close();
+        props.remove(PropertyKey.loadBalanceBlacklistTimeout.getKeyName());
+
+        /*
+         * Non-existing affinity host.
+         */
+        props.setProperty(PropertyKey.serverAffinityOrder.getKeyName(), "testlbconn-nohost:12345");
+        testConn = getUnreliableLoadBalancedConnection(hosts, props, new HashSet<>(Arrays.asList(HOST_1, HOST_2, HOST_4)));
+        testConn.setAutoCommit(false);
+        assertTrue(
+                UnreliableSocketFactory.getHostFromLastConnection().equals(HOST_3_OK) || UnreliableSocketFactory.getHostFromLastConnection().equals(HOST_5_OK));
+
+        this.conn.close();
     }
 }

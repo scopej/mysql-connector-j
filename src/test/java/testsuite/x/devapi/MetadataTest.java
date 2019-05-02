@@ -1,24 +1,30 @@
 /*
-  Copyright (c) 2016, 2017, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2016, 2018, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite.x.devapi;
@@ -27,20 +33,20 @@ import static org.junit.Assert.assertEquals;
 
 import java.util.List;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.mysql.cj.api.xdevapi.Column;
-import com.mysql.cj.api.xdevapi.RowResult;
-import com.mysql.cj.api.xdevapi.Table;
-import com.mysql.cj.api.xdevapi.Type;
-import com.mysql.cj.core.ServerVersion;
+import com.mysql.cj.ServerVersion;
+import com.mysql.cj.x.protobuf.MysqlxResultset.ColumnMetaData;
+import com.mysql.cj.xdevapi.Column;
+import com.mysql.cj.xdevapi.RowResult;
+import com.mysql.cj.xdevapi.Table;
+import com.mysql.cj.xdevapi.Type;
 
 /**
  * Tests for "Column" table metadata API.
  */
-public class MetadataTest extends TableTest {
+public class MetadataTest extends BaseTableTestCase {
     @Before
     @Override
     public void setupTableTest() {
@@ -49,12 +55,6 @@ public class MetadataTest extends TableTest {
             sqlUpdate("drop table if exists example_metadata");
             sqlUpdate("create table example_metadata (_id varchar(32), name varchar(20), birthday date, age int)");
         }
-    }
-
-    @After
-    @Override
-    public void teardownTableTest() {
-        super.teardownTableTest();
     }
 
     @Test
@@ -81,8 +81,14 @@ public class MetadataTest extends TableTest {
         }
         assertEquals(0, idCol.getFractionalDigits());
         assertEquals(false, idCol.isNumberSigned()); // odd default
-        assertEquals(this.dbCollation, idCol.getCollationName());
-        assertEquals(this.dbCharset, idCol.getCharacterSetName());
+        if (mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.14"))) {
+            // after Bug#28180155 fix
+            assertEquals("utf8mb4_general_ci", idCol.getCollationName());
+            assertEquals("utf8mb4", idCol.getCharacterSetName());
+        } else {
+            assertEquals(this.dbCollation, idCol.getCollationName());
+            assertEquals(this.dbCharset, idCol.getCharacterSetName());
+        }
         assertEquals(false, idCol.isPadded());
         assertEquals(true, idCol.isNullable());
         assertEquals(false, idCol.isAutoIncrement());
@@ -104,8 +110,14 @@ public class MetadataTest extends TableTest {
         }
         assertEquals(0, nameCol.getFractionalDigits());
         assertEquals(false, nameCol.isNumberSigned());
-        assertEquals(this.dbCollation, nameCol.getCollationName());
-        assertEquals(this.dbCharset, nameCol.getCharacterSetName());
+        if (mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.14"))) {
+            // after Bug#28180155 fix
+            assertEquals("utf8mb4_general_ci", nameCol.getCollationName());
+            assertEquals("utf8mb4", nameCol.getCharacterSetName());
+        } else {
+            assertEquals(this.dbCollation, nameCol.getCollationName());
+            assertEquals(this.dbCharset, nameCol.getCharacterSetName());
+        }
         assertEquals(false, nameCol.isPadded());
         assertEquals(true, nameCol.isNullable());
         assertEquals(false, nameCol.isAutoIncrement());
@@ -176,8 +188,14 @@ public class MetadataTest extends TableTest {
         }
         assertEquals(0, idCol.getFractionalDigits());
         assertEquals(false, idCol.isNumberSigned());
-        assertEquals(this.dbCollation, idCol.getCollationName());
-        assertEquals(this.dbCharset, idCol.getCharacterSetName());
+        if (mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.14"))) {
+            // after Bug#28180155 fix
+            assertEquals("utf8mb4_general_ci", idCol.getCollationName());
+            assertEquals("utf8mb4", idCol.getCharacterSetName());
+        } else {
+            assertEquals(this.dbCollation, idCol.getCollationName());
+            assertEquals(this.dbCharset, idCol.getCharacterSetName());
+        }
         assertEquals(false, idCol.isPadded());
         assertEquals(true, idCol.isNullable());
         assertEquals(false, idCol.isAutoIncrement());
@@ -236,18 +254,26 @@ public class MetadataTest extends TableTest {
         assertEquals("_id", idCol.getColumnName());
         assertEquals("_id", idCol.getColumnLabel());
         assertEquals(Type.STRING, idCol.getType());
-        assertEquals(128, idCol.getLength());
+        if (mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.5"))) {
+            assertEquals(32, idCol.getLength());
+        } else {
+            assertEquals(128, idCol.getLength());
+        }
         assertEquals(0, idCol.getFractionalDigits());
         assertEquals(false, idCol.isNumberSigned());
 
-        // Unlike ordinary tables, collections are always created in uft8mb4 charset, but collation was changed in 8.0.1
-        if (mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.1"))) {
+        // Unlike ordinary tables, collections are always created in uft8mb4 charset, but collation was changed in 8.0.1.
+        // Since MySQL 8.0.5 the _id column has collation 'binary'.
+        if (mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.5"))) {
+            assertEquals("binary", idCol.getCollationName());
+            assertEquals("binary", idCol.getCharacterSetName());
+        } else if (mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.1"))) {
             assertEquals("utf8mb4_0900_ai_ci", idCol.getCollationName());
+            assertEquals("utf8mb4", idCol.getCharacterSetName());
         } else {
             assertEquals("utf8mb4_general_ci", idCol.getCollationName());
+            assertEquals("utf8mb4", idCol.getCharacterSetName());
         }
-
-        assertEquals("utf8mb4", idCol.getCharacterSetName());
         assertEquals(false, idCol.isPadded());
         assertEquals(false, idCol.isNullable());
         assertEquals(false, idCol.isAutoIncrement());
@@ -275,6 +301,41 @@ public class MetadataTest extends TableTest {
         assertEquals(false, docCol.isPartKey());
     }
 
+    /**
+     * Some metadata fields have no sense with concrete SQL data type. The following table from {@link ColumnMetaData}
+     * describes which fields are relevant to each type:
+     * 
+     * <pre>
+     *     ================= ============ ======= ========== ====== ========
+     *     SQL Type          .type        .length .frac_dig  .flags .charset
+     *     ================= ============ ======= ========== ====== ========
+     *     TINY              SINT         x
+     *     TINY UNSIGNED     UINT         x                  x
+     *     SHORT             SINT         x
+     *     SHORT UNSIGNED    UINT         x                  x
+     *     INT24             SINT         x
+     *     INT24 UNSIGNED    UINT         x                  x
+     *     INT               SINT         x
+     *     INT UNSIGNED      UINT         x                  x
+     *     LONGLONG          SINT         x
+     *     LONGLONG UNSIGNED UINT         x                  x
+     *     DOUBLE            DOUBLE       x       x          x
+     *     FLOAT             FLOAT        x       x          x
+     *     DECIMAL           DECIMAL      x       x          x
+     *     VARCHAR,CHAR,...  BYTES        x                  x      x
+     *     GEOMETRY          BYTES
+     *     TIME              TIME         x
+     *     DATE              DATETIME     x
+     *     DATETIME          DATETIME     x
+     *     YEAR              UINT         x                  x
+     *     TIMESTAMP         DATETIME     x
+     *     SET               SET                                    x
+     *     ENUM              ENUM                                   x
+     *     NULL              BYTES
+     *     BIT               BIT          x
+     *     ================= ============ ======= ========== ====== ========
+     * </pre>
+     */
     @Test
     public void exhaustTypes() {
         if (!this.isSetForXTests) {
@@ -298,17 +359,17 @@ public class MetadataTest extends TableTest {
         assertEquals("a", c.getColumnName());
         assertEquals("a", c.getColumnLabel());
         assertEquals(Type.BIT, c.getType());
-        assertEquals(1, c.getLength());
-        assertEquals(0, c.getFractionalDigits());
-        assertEquals(false, c.isNumberSigned());
-        assertEquals(null, c.getCollationName());
-        assertEquals(null, c.getCharacterSetName());
-        assertEquals(false, c.isPadded());
-        assertEquals(true, c.isNullable());
-        assertEquals(false, c.isAutoIncrement());
-        assertEquals(false, c.isPrimaryKey());
-        assertEquals(true, c.isUniqueKey());
-        assertEquals(false, c.isPartKey());
+        // assertEquals(1, c.getLength()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(0, c.getFractionalDigits()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isNumberSigned()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCollationName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCharacterSetName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPadded()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(true, c.isNullable()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isAutoIncrement()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPrimaryKey()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(true, c.isUniqueKey()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPartKey()); // irrelevant, we shouldn't expect any concrete value
 
         c = metadata.get(1);
         assertEquals(this.schema.getName(), c.getSchemaName());
@@ -322,10 +383,16 @@ public class MetadataTest extends TableTest {
         } else {
             assertEquals(20, c.getLength());
         }
-        assertEquals(0, c.getFractionalDigits());
+        // assertEquals(0, c.getFractionalDigits()); // irrelevant, we shouldn't expect any concrete value
         assertEquals(false, c.isNumberSigned());
-        assertEquals(this.dbCollation, c.getCollationName());
-        assertEquals(this.dbCharset, c.getCharacterSetName());
+        if (mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.14"))) {
+            // after Bug#28180155 fix
+            assertEquals("utf8mb4_general_ci", c.getCollationName());
+            assertEquals("utf8mb4", c.getCharacterSetName());
+        } else {
+            assertEquals(this.dbCollation, c.getCollationName());
+            assertEquals(this.dbCharset, c.getCharacterSetName());
+        }
         assertEquals(true, c.isPadded());
         assertEquals(false, c.isNullable());
         assertEquals(false, c.isAutoIncrement());
@@ -341,16 +408,16 @@ public class MetadataTest extends TableTest {
         assertEquals("c", c.getColumnLabel());
         assertEquals(Type.INT, c.getType());
         assertEquals(11, c.getLength());
-        assertEquals(0, c.getFractionalDigits());
+        // assertEquals(0, c.getFractionalDigits()); // irrelevant, we shouldn't expect any concrete value
         assertEquals(true, c.isNumberSigned());
-        assertEquals(null, c.getCollationName());
-        assertEquals(null, c.getCharacterSetName());
-        assertEquals(false, c.isPadded());
-        assertEquals(true, c.isNullable());
-        assertEquals(false, c.isAutoIncrement());
-        assertEquals(false, c.isPrimaryKey());
-        assertEquals(false, c.isUniqueKey());
-        assertEquals(false, c.isPartKey());
+        // assertEquals(null, c.getCollationName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCharacterSetName()); // irrelevant, we shouldn't expect any concrete value
+        assertEquals(false, c.isPadded()); // irrelevant, we shouldn't expect any concrete value
+        assertEquals(true, c.isNullable()); // irrelevant, we shouldn't expect any concrete value
+        assertEquals(false, c.isAutoIncrement()); // irrelevant, we shouldn't expect any concrete value
+        assertEquals(false, c.isPrimaryKey()); // irrelevant, we shouldn't expect any concrete value
+        assertEquals(false, c.isUniqueKey()); // irrelevant, we shouldn't expect any concrete value
+        assertEquals(false, c.isPartKey()); // irrelevant, we shouldn't expect any concrete value
 
         c = metadata.get(3);
         assertEquals(this.schema.getName(), c.getSchemaName());
@@ -360,10 +427,10 @@ public class MetadataTest extends TableTest {
         assertEquals("d", c.getColumnLabel());
         assertEquals(Type.TINYINT, c.getType());
         assertEquals(3, c.getLength());
-        assertEquals(0, c.getFractionalDigits());
+        // assertEquals(0, c.getFractionalDigits()); // irrelevant, we shouldn't expect any concrete value
         assertEquals(false, c.isNumberSigned());
-        assertEquals(null, c.getCollationName());
-        assertEquals(null, c.getCharacterSetName());
+        // assertEquals(null, c.getCollationName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCharacterSetName()); // irrelevant, we shouldn't expect any concrete value
         assertEquals(false, c.isPadded());
         assertEquals(false, c.isNullable());
         assertEquals(false, c.isAutoIncrement());
@@ -379,16 +446,16 @@ public class MetadataTest extends TableTest {
         assertEquals("e", c.getColumnLabel());
         assertEquals(Type.BIGINT, c.getType());
         assertEquals(20, c.getLength());
-        assertEquals(0, c.getFractionalDigits());
+        // assertEquals(0, c.getFractionalDigits()); // irrelevant, we shouldn't expect any concrete value
         assertEquals(true, c.isNumberSigned());
-        assertEquals(null, c.getCollationName());
-        assertEquals(null, c.getCharacterSetName());
-        assertEquals(false, c.isPadded());
-        assertEquals(true, c.isNullable());
-        assertEquals(false, c.isAutoIncrement());
-        assertEquals(false, c.isPrimaryKey());
-        assertEquals(false, c.isUniqueKey());
-        assertEquals(false, c.isPartKey());
+        // assertEquals(null, c.getCollationName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCharacterSetName()); // irrelevant, we shouldn't expect any concrete value
+        assertEquals(false, c.isPadded()); // irrelevant, we shouldn't expect any concrete value
+        assertEquals(true, c.isNullable()); // irrelevant, we shouldn't expect any concrete value
+        assertEquals(false, c.isAutoIncrement()); // irrelevant, we shouldn't expect any concrete value
+        assertEquals(false, c.isPrimaryKey()); // irrelevant, we shouldn't expect any concrete value
+        assertEquals(false, c.isUniqueKey()); // irrelevant, we shouldn't expect any concrete value
+        assertEquals(false, c.isPartKey()); // irrelevant, we shouldn't expect any concrete value
 
         c = metadata.get(5);
         assertEquals(this.schema.getName(), c.getSchemaName());
@@ -400,8 +467,8 @@ public class MetadataTest extends TableTest {
         assertEquals(22, c.getLength());
         assertEquals(31, c.getFractionalDigits());
         assertEquals(true, c.isNumberSigned());
-        assertEquals(null, c.getCollationName());
-        assertEquals(null, c.getCharacterSetName());
+        // assertEquals(null, c.getCollationName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCharacterSetName()); // irrelevant, we shouldn't expect any concrete value
         assertEquals(false, c.isPadded());
         assertEquals(true, c.isNullable());
         assertEquals(false, c.isAutoIncrement());
@@ -419,8 +486,8 @@ public class MetadataTest extends TableTest {
         assertEquals(22, c.getLength());
         assertEquals(3, c.getFractionalDigits());
         assertEquals(true, c.isNumberSigned());
-        assertEquals(null, c.getCollationName());
-        assertEquals(null, c.getCharacterSetName());
+        // assertEquals(null, c.getCollationName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCharacterSetName()); // irrelevant, we shouldn't expect any concrete value
         assertEquals(false, c.isPadded());
         assertEquals(true, c.isNullable());
         assertEquals(false, c.isAutoIncrement());
@@ -436,16 +503,16 @@ public class MetadataTest extends TableTest {
         assertEquals("h", c.getColumnLabel());
         assertEquals(Type.TIME, c.getType());
         assertEquals(10, c.getLength());
-        assertEquals(0, c.getFractionalDigits());
-        assertEquals(false, c.isNumberSigned());
-        assertEquals(null, c.getCollationName());
-        assertEquals(null, c.getCharacterSetName());
-        assertEquals(false, c.isPadded());
-        assertEquals(true, c.isNullable());
-        assertEquals(false, c.isAutoIncrement());
-        assertEquals(false, c.isPrimaryKey());
-        assertEquals(false, c.isUniqueKey());
-        assertEquals(false, c.isPartKey());
+        // assertEquals(0, c.getFractionalDigits()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isNumberSigned()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCollationName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCharacterSetName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPadded()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(true, c.isNullable()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isAutoIncrement()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPrimaryKey()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isUniqueKey()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPartKey()); // irrelevant, we shouldn't expect any concrete value
 
         c = metadata.get(8);
         assertEquals(this.schema.getName(), c.getSchemaName());
@@ -455,16 +522,16 @@ public class MetadataTest extends TableTest {
         assertEquals("i", c.getColumnLabel());
         assertEquals(Type.DATETIME, c.getType());
         assertEquals(19, c.getLength());
-        assertEquals(0, c.getFractionalDigits());
-        assertEquals(false, c.isNumberSigned());
-        assertEquals(null, c.getCollationName());
-        assertEquals(null, c.getCharacterSetName());
-        assertEquals(false, c.isPadded());
-        assertEquals(true, c.isNullable());
-        assertEquals(false, c.isAutoIncrement());
-        assertEquals(false, c.isPrimaryKey());
-        assertEquals(false, c.isUniqueKey());
-        assertEquals(false, c.isPartKey());
+        // assertEquals(0, c.getFractionalDigits()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isNumberSigned()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCollationName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCharacterSetName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPadded()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(true, c.isNullable()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isAutoIncrement()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPrimaryKey()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isUniqueKey()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPartKey()); // irrelevant, we shouldn't expect any concrete value
 
         c = metadata.get(9);
         assertEquals(this.schema.getName(), c.getSchemaName());
@@ -474,16 +541,16 @@ public class MetadataTest extends TableTest {
         assertEquals("j", c.getColumnLabel());
         assertEquals(Type.TIMESTAMP, c.getType());
         assertEquals(19, c.getLength());
-        assertEquals(0, c.getFractionalDigits());
-        assertEquals(false, c.isNumberSigned());
-        assertEquals(null, c.getCollationName());
-        assertEquals(null, c.getCharacterSetName());
-        assertEquals(false, c.isPadded());
-        assertEquals(true, c.isNullable());
-        assertEquals(false, c.isAutoIncrement());
-        assertEquals(false, c.isPrimaryKey());
-        assertEquals(false, c.isUniqueKey());
-        assertEquals(false, c.isPartKey());
+        // assertEquals(0, c.getFractionalDigits()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isNumberSigned()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCollationName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCharacterSetName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPadded()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(true, c.isNullable()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isAutoIncrement()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPrimaryKey()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isUniqueKey()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPartKey()); // irrelevant, we shouldn't expect any concrete value
 
         c = metadata.get(10);
         assertEquals(this.schema.getName(), c.getSchemaName());
@@ -493,16 +560,16 @@ public class MetadataTest extends TableTest {
         assertEquals("k", c.getColumnLabel());
         assertEquals(Type.DATE, c.getType());
         assertEquals(10, c.getLength());
-        assertEquals(0, c.getFractionalDigits());
-        assertEquals(false, c.isNumberSigned());
-        assertEquals(null, c.getCollationName());
-        assertEquals(null, c.getCharacterSetName());
-        assertEquals(false, c.isPadded());
-        assertEquals(true, c.isNullable());
-        assertEquals(false, c.isAutoIncrement());
-        assertEquals(false, c.isPrimaryKey());
-        assertEquals(false, c.isUniqueKey());
-        assertEquals(false, c.isPartKey());
+        // assertEquals(0, c.getFractionalDigits()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isNumberSigned()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCollationName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(null, c.getCharacterSetName()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPadded()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(true, c.isNullable()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isAutoIncrement()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPrimaryKey()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isUniqueKey()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPartKey()); // irrelevant, we shouldn't expect any concrete value
 
         c = metadata.get(11);
         assertEquals(this.schema.getName(), c.getSchemaName());
@@ -511,21 +578,23 @@ public class MetadataTest extends TableTest {
         assertEquals("l", c.getColumnName());
         assertEquals("l", c.getColumnLabel());
         assertEquals(Type.SET, c.getType());
-        if ("utf8mb4_0900_ai_ci".equals(this.dbCollation)) {
-            assertEquals(12, c.getLength()); // TODO is it an xplugin bug after changing default charset to utf8mb4?
+        // assertEquals(3, c.getLength()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(0, c.getFractionalDigits()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isNumberSigned()); // irrelevant, we shouldn't expect any concrete value
+        if (mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.14"))) {
+            // after Bug#28180155 fix
+            assertEquals("utf8mb4_general_ci", c.getCollationName());
+            assertEquals("utf8mb4", c.getCharacterSetName());
         } else {
-            assertEquals(3, c.getLength());
+            assertEquals(this.dbCollation, c.getCollationName());
+            assertEquals(this.dbCharset, c.getCharacterSetName());
         }
-        assertEquals(0, c.getFractionalDigits());
-        assertEquals(false, c.isNumberSigned());
-        assertEquals(this.dbCollation, c.getCollationName());
-        assertEquals(this.dbCharset, c.getCharacterSetName());
-        assertEquals(false, c.isPadded());
-        assertEquals(true, c.isNullable());
-        assertEquals(false, c.isAutoIncrement());
-        assertEquals(false, c.isPrimaryKey());
-        assertEquals(false, c.isUniqueKey());
-        assertEquals(false, c.isPartKey());
+        // assertEquals(false, c.isPadded()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(true, c.isNullable()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isAutoIncrement()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPrimaryKey()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isUniqueKey()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPartKey()); // irrelevant, we shouldn't expect any concrete value
 
         c = metadata.get(12);
         assertEquals(this.schema.getName(), c.getSchemaName());
@@ -534,21 +603,23 @@ public class MetadataTest extends TableTest {
         assertEquals("m", c.getColumnName());
         assertEquals("m", c.getColumnLabel());
         assertEquals(Type.ENUM, c.getType());
-        if ("utf8mb4_0900_ai_ci".equals(this.dbCollation)) {
-            assertEquals(4, c.getLength()); // TODO is it an xplugin bug after changing default charset to utf8mb4?
+        // assertEquals(1, c.getLength()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(0, c.getFractionalDigits()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isNumberSigned()); // irrelevant, we shouldn't expect any concrete value
+        if (mysqlVersionMeetsMinimum(ServerVersion.parseVersion("8.0.14"))) {
+            // after Bug#28180155 fix
+            assertEquals("utf8mb4_general_ci", c.getCollationName());
+            assertEquals("utf8mb4", c.getCharacterSetName());
         } else {
-            assertEquals(1, c.getLength());
+            assertEquals(this.dbCollation, c.getCollationName());
+            assertEquals(this.dbCharset, c.getCharacterSetName());
         }
-        assertEquals(0, c.getFractionalDigits());
-        assertEquals(false, c.isNumberSigned());
-        assertEquals(this.dbCollation, c.getCollationName());
-        assertEquals(this.dbCharset, c.getCharacterSetName());
-        assertEquals(false, c.isPadded());
-        assertEquals(true, c.isNullable());
-        assertEquals(false, c.isAutoIncrement());
-        assertEquals(false, c.isPrimaryKey());
-        assertEquals(false, c.isUniqueKey());
-        assertEquals(false, c.isPartKey());
+        // assertEquals(false, c.isPadded()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(true, c.isNullable()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isAutoIncrement()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPrimaryKey()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isUniqueKey()); // irrelevant, we shouldn't expect any concrete value
+        // assertEquals(false, c.isPartKey()); // irrelevant, we shouldn't expect any concrete value
 
     }
 }

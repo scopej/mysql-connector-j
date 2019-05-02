@@ -1,29 +1,36 @@
 /*
-  Copyright (c) 2002, 2017, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2002, 2019, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite.regression;
 
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.io.Reader;
 import java.io.StringReader;
 import java.lang.management.ManagementFactory;
@@ -44,7 +51,9 @@ import java.sql.JDBCType;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.SQLDataException;
 import java.sql.SQLException;
+import java.sql.SQLWarning;
 import java.sql.SQLXML;
 import java.sql.Statement;
 import java.sql.Time;
@@ -73,18 +82,15 @@ import java.util.concurrent.TimeUnit;
 
 import javax.sql.rowset.CachedRowSet;
 
-import com.mysql.cj.api.exceptions.ExceptionInterceptor;
-import com.mysql.cj.api.jdbc.JdbcConnection;
-import com.mysql.cj.api.log.Log;
-import com.mysql.cj.core.Messages;
-import com.mysql.cj.core.MysqlType;
-import com.mysql.cj.core.conf.PropertyDefinitions;
-import com.mysql.cj.core.exceptions.CJCommunicationsException;
-import com.mysql.cj.core.exceptions.ExceptionInterceptorChain;
-import com.mysql.cj.core.exceptions.MysqlErrorNumbers;
-import com.mysql.cj.core.io.SqlDateValueFactory;
-import com.mysql.cj.core.log.StandardLogger;
-import com.mysql.cj.core.util.Util;
+import com.mysql.cj.Messages;
+import com.mysql.cj.MysqlType;
+import com.mysql.cj.conf.DefaultPropertySet;
+import com.mysql.cj.conf.PropertyKey;
+import com.mysql.cj.exceptions.CJCommunicationsException;
+import com.mysql.cj.exceptions.ExceptionInterceptor;
+import com.mysql.cj.exceptions.ExceptionInterceptorChain;
+import com.mysql.cj.exceptions.MysqlErrorNumbers;
+import com.mysql.cj.jdbc.JdbcConnection;
 import com.mysql.cj.jdbc.MysqlSQLXML;
 import com.mysql.cj.jdbc.ServerPreparedStatement;
 import com.mysql.cj.jdbc.StatementImpl;
@@ -93,8 +99,14 @@ import com.mysql.cj.jdbc.exceptions.MysqlDataTruncation;
 import com.mysql.cj.jdbc.exceptions.NotUpdatable;
 import com.mysql.cj.jdbc.result.ResultSetImpl;
 import com.mysql.cj.jdbc.result.UpdatableResultSet;
-import com.mysql.cj.mysqla.result.MysqlaResultset;
-import com.mysql.cj.mysqla.result.ResultsetRowsCursor;
+import com.mysql.cj.log.Log;
+import com.mysql.cj.log.StandardLogger;
+import com.mysql.cj.protocol.InternalDate;
+import com.mysql.cj.protocol.a.result.NativeResultset;
+import com.mysql.cj.protocol.a.result.ResultsetRowsCursor;
+import com.mysql.cj.result.SqlDateValueFactory;
+import com.mysql.cj.util.TimeUtil;
+import com.mysql.cj.util.Util;
 
 import testsuite.BaseTestCase;
 
@@ -289,7 +301,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
     public void testClobberStreamingRS() throws Exception {
         try {
             Properties props = new Properties();
-            props.setProperty(PropertyDefinitions.PNAME_clobberStreamingResults, "true");
+            props.setProperty(PropertyKey.clobberStreamingResults.getKeyName(), "true");
 
             Connection clobberConn = getConnectionWithProps(props);
 
@@ -613,7 +625,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
      */
     public void testUpdatabilityAndEscaping() throws Exception {
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_characterEncoding, "big5");
+        props.setProperty(PropertyKey.characterEncoding.getKeyName(), "big5");
 
         Connection updConn = getConnectionWithProps(props);
         Statement updStmt = updConn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_UPDATABLE);
@@ -690,7 +702,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
 
         clob.setString(1, "bar");
 
-        this.rs.updateClob(2, clob);
+        this.rs.updateClob("clobField", clob);
         this.rs.updateRow();
 
         this.rs.moveToInsertRow();
@@ -1102,7 +1114,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
 
         Properties props = new Properties();
 
-        props.setProperty(PropertyDefinitions.PNAME_characterEncoding, "SJIS");
+        props.setProperty(PropertyKey.characterEncoding.getKeyName(), "SJIS");
 
         Connection sjisConn = null;
         Statement sjisStmt = null;
@@ -1159,12 +1171,12 @@ public class ResultSetRegressionTest extends BaseTestCase {
         try {
             if (versionMeetsMinimum(5, 7, 4)) {
                 Properties props = new Properties();
-                props.setProperty(PropertyDefinitions.PNAME_jdbcCompliantTruncation, "false");
+                props.setProperty(PropertyKey.jdbcCompliantTruncation.getKeyName(), "false");
                 if (versionMeetsMinimum(5, 7, 5)) {
                     String sqlMode = getMysqlVariable("sql_mode");
                     if (sqlMode.contains("STRICT_TRANS_TABLES")) {
                         sqlMode = removeSqlMode("STRICT_TRANS_TABLES", sqlMode);
-                        props.setProperty(PropertyDefinitions.PNAME_sessionVariables, "sql_mode='" + sqlMode + "'");
+                        props.setProperty(PropertyKey.sessionVariables.getKeyName(), "sql_mode='" + sqlMode + "'");
                     }
                 }
                 testConn = getConnectionWithProps(props);
@@ -1261,9 +1273,9 @@ public class ResultSetRegressionTest extends BaseTestCase {
         this.stmt.executeUpdate("INSERT INTO testBug8428 VALUES ('1999', '2005-02-11 12:54:41')");
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_noDatetimeStringSync, "true");
-        props.setProperty(PropertyDefinitions.PNAME_useUsageAdvisor, "true");
-        props.setProperty(PropertyDefinitions.PNAME_yearIsDateType, "false");
+        props.setProperty(PropertyKey.noDatetimeStringSync.getKeyName(), "true");
+        props.setProperty(PropertyKey.useUsageAdvisor.getKeyName(), "true");
+        props.setProperty(PropertyKey.yearIsDateType.getKeyName(), "false");
 
         noSyncConn = getConnectionWithProps(props);
 
@@ -1326,12 +1338,12 @@ public class ResultSetRegressionTest extends BaseTestCase {
         try {
             if (versionMeetsMinimum(5, 7, 4)) {
                 Properties props = new Properties();
-                props.setProperty(PropertyDefinitions.PNAME_jdbcCompliantTruncation, "false");
+                props.setProperty(PropertyKey.jdbcCompliantTruncation.getKeyName(), "false");
                 if (versionMeetsMinimum(5, 7, 5)) {
                     String sqlMode = getMysqlVariable("sql_mode");
                     if (sqlMode.contains("STRICT_TRANS_TABLES")) {
                         sqlMode = removeSqlMode("STRICT_TRANS_TABLES", sqlMode);
-                        props.setProperty(PropertyDefinitions.PNAME_sessionVariables, "sql_mode='" + sqlMode + "'");
+                        props.setProperty(PropertyKey.sessionVariables.getKeyName(), "sql_mode='" + sqlMode + "'");
                     }
                 }
                 testConn = getConnectionWithProps(props);
@@ -1616,7 +1628,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
 
         try {
             Properties props = new Properties();
-            props.setProperty(PropertyDefinitions.PNAME_useInformationSchema, "true");
+            props.setProperty(PropertyKey.useInformationSchema.getKeyName(), "true");
 
             infoSchemConn = getConnectionWithProps(props);
 
@@ -1642,7 +1654,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
     public void testBug15604() throws Exception {
         createTable("testBug15604_date_cal", "(field1 DATE)");
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_sessionVariables, "time_zone='America/Chicago'");
+        props.setProperty(PropertyKey.sessionVariables.getKeyName(), "time_zone='America/Chicago'");
 
         Connection nonLegacyConn = getConnectionWithProps(props);
 
@@ -1876,7 +1888,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
         Statement updStmt = null;
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_sessionVariables, "sql_mode=ansi");
+        props.setProperty(PropertyKey.sessionVariables.getKeyName(), "sql_mode=ansi");
 
         try {
             ansiConn = getConnectionWithProps(props);
@@ -1998,7 +2010,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
         Connection advisorConn = null;
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useUsageAdvisor, "true");
+        props.setProperty(PropertyKey.useUsageAdvisor.getKeyName(), "true");
 
         advisorConn = getConnectionWithProps(props);
         this.pstmt = advisorConn.prepareStatement("SELECT 1");
@@ -2009,8 +2021,10 @@ public class ResultSetRegressionTest extends BaseTestCase {
 
     public void testAllTypesForNull() throws Exception {
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_jdbcCompliantTruncation, "false");
-        props.setProperty(PropertyDefinitions.PNAME_zeroDateTimeBehavior, "ROUND");
+        props.setProperty(PropertyKey.jdbcCompliantTruncation.getKeyName(), "false");
+        props.setProperty(PropertyKey.zeroDateTimeBehavior.getKeyName(), "ROUND");
+        props.setProperty(PropertyKey.sslMode.getKeyName(), "DISABLED");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
         Connection conn2 = getConnectionWithProps(props);
         Statement stmt2 = conn2.createStatement();
 
@@ -2184,7 +2198,13 @@ public class ResultSetRegressionTest extends BaseTestCase {
                         assertTrue(!rsToTest.wasNull());
                         assertEquals(0, rsToTest.getLong(i + 1));
                         assertTrue(!rsToTest.wasNull());
-                        assertEquals(0, rsToTest.getByte(i + 1));
+
+                        if (typeName.contains("TEXT") || typeName.contains("CHAR")) {
+                            assertEquals('0', rsToTest.getByte(i + 1));
+                        } else {
+                            assertEquals(0, rsToTest.getByte(i + 1));
+                        }
+
                         assertTrue(!rsToTest.wasNull());
                         assertEquals(0, rsToTest.getShort(i + 1));
                         assertTrue(!rsToTest.wasNull());
@@ -2306,7 +2326,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
         //
 
         props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_emptyStringsConvertToZero, "false");
+        props.setProperty(PropertyKey.emptyStringsConvertToZero.getKeyName(), "false");
 
         Connection pedanticConn = getConnectionWithProps(props);
         Statement pedanticStmt = pedanticConn.createStatement();
@@ -2321,7 +2341,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
         checkEmptyConvertToZeroException();
 
         props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_emptyStringsConvertToZero, "false");
+        props.setProperty(PropertyKey.emptyStringsConvertToZero.getKeyName(), "false");
 
         pedanticConn = getConnectionWithProps(props);
         pedanticStmt = pedanticConn.createStatement();
@@ -2356,7 +2376,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
             assertEquals(0, this.rs.getByte(1));
             fail("Should've thrown an exception!");
         } catch (SQLException sqlEx) {
-            assertEquals(MysqlErrorNumbers.SQL_STATE_INVALID_CHARACTER_VALUE_FOR_CAST, sqlEx.getSQLState());
+            assertEquals(MysqlErrorNumbers.SQL_STATE_NUMERIC_VALUE_OUT_OF_RANGE, sqlEx.getSQLState());
         }
         try {
             assertEquals(0, this.rs.getShort(1));
@@ -2431,7 +2451,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
         assertEquals(newYears2005.toString(), this.rs.getString(1));
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_yearIsDateType, "false");
+        props.setProperty(PropertyKey.yearIsDateType.getKeyName(), "false");
 
         Connection yearShortConn = getConnectionWithProps(props);
         this.rs = yearShortConn.createStatement().executeQuery("SELECT field1 FROM " + tableName);
@@ -2884,7 +2904,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
 
         try {
             Properties props = new Properties();
-            props.setProperty(PropertyDefinitions.PNAME_useOldAliasMetadataBehavior, "true");
+            props.setProperty(PropertyKey.useOldAliasMetadataBehavior.getKeyName(), "true");
             legacyConn = getConnectionWithProps(props);
             legacyStmt = legacyConn.createStatement();
 
@@ -2941,7 +2961,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
         assertEquals(Types.VARBINARY, this.rs.getMetaData().getColumnType(1));
         assertEquals(Types.VARBINARY, this.rs.getMetaData().getColumnType(2));
 
-        this.rs = ((com.mysql.cj.api.jdbc.JdbcConnection) this.conn)
+        this.rs = ((com.mysql.cj.jdbc.JdbcConnection) this.conn)
                 .serverPrepareStatement("select t1.x t1x,(select x from testBug24710 t2 where t2.x=t1.x) t2x from testBug24710 t1").executeQuery();
 
         assertEquals(Types.VARBINARY, this.rs.getMetaData().getColumnType(1));
@@ -2993,8 +3013,8 @@ public class ResultSetRegressionTest extends BaseTestCase {
 
         try {
             Properties props = new Properties();
-            props.setProperty(PropertyDefinitions.PNAME_useServerPrepStmts, "true");
-            props.setProperty(PropertyDefinitions.PNAME_useCursorFetch, "true");
+            props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), "true");
+            props.setProperty(PropertyKey.useCursorFetch.getKeyName(), "true");
 
             fetchConn = getConnectionWithProps(props);
             fetchStmt = fetchConn.createStatement();
@@ -3088,8 +3108,8 @@ public class ResultSetRegressionTest extends BaseTestCase {
         Connection deserializeConn = null;
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_autoDeserialize, "true");
-        props.setProperty(PropertyDefinitions.PNAME_treatUtilDateAsTimestamp, "false");
+        props.setProperty(PropertyKey.autoDeserialize.getKeyName(), "true");
+        props.setProperty(PropertyKey.treatUtilDateAsTimestamp.getKeyName(), "false");
 
         deserializeConn = getConnectionWithProps(props);
 
@@ -3107,14 +3127,14 @@ public class ResultSetRegressionTest extends BaseTestCase {
 
     public void testTruncationDisable() throws Exception {
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_jdbcCompliantTruncation, "false");
+        props.setProperty(PropertyKey.jdbcCompliantTruncation.getKeyName(), "false");
         Connection truncConn = null;
 
         truncConn = getConnectionWithProps(props);
         this.rs = truncConn.createStatement().executeQuery("SELECT " + Long.MAX_VALUE);
         this.rs.next();
-        this.rs.getInt(1);
-
+        int i = this.rs.getInt(1);
+        System.out.println(i);
     }
 
     public void testUsageAdvisorOnZeroRowResultSet() throws Exception {
@@ -3123,7 +3143,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
 
         try {
             Properties props = new Properties();
-            props.setProperty(PropertyDefinitions.PNAME_useUsageAdvisor, "true");
+            props.setProperty(PropertyKey.useUsageAdvisor.getKeyName(), "true");
 
             advisorConn = getConnectionWithProps(props);
 
@@ -3147,8 +3167,8 @@ public class ResultSetRegressionTest extends BaseTestCase {
 
             advisorConn.close();
 
-            props.setProperty(PropertyDefinitions.PNAME_useCursorFetch, "true");
-            props.setProperty(PropertyDefinitions.PNAME_useServerPrepStmts, "true");
+            props.setProperty(PropertyKey.useCursorFetch.getKeyName(), "true");
+            props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), "true");
 
             advisorConn = getConnectionWithProps(props);
 
@@ -3222,9 +3242,10 @@ public class ResultSetRegressionTest extends BaseTestCase {
         Statement stmtRead = null;
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useSSL, "false");
-        props.setProperty(PropertyDefinitions.PNAME_useServerPrepStmts, "true");
-        props.setProperty(PropertyDefinitions.PNAME_useCursorFetch, "true");
+        props.setProperty(PropertyKey.useSSL.getKeyName(), "false");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+        props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), "true");
+        props.setProperty(PropertyKey.useCursorFetch.getKeyName(), "true");
 
         try {
 
@@ -3436,7 +3457,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
 
     public void testBug24886() throws Exception {
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_blobsAreStrings, "true");
+        props.setProperty(PropertyKey.blobsAreStrings.getKeyName(), "true");
 
         Connection noBlobConn = getConnectionWithProps(props);
 
@@ -3449,7 +3470,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
         assertEquals("java.lang.String", this.rs.getObject(1).getClass().getName());
 
         props.clear();
-        props.setProperty(PropertyDefinitions.PNAME_functionsNeverReturnBlobs, "true");
+        props.setProperty(PropertyKey.functionsNeverReturnBlobs.getKeyName(), "true");
         noBlobConn = getConnectionWithProps(props);
         this.rs = noBlobConn.createStatement()
                 .executeQuery("SELECT concat(Class,petallength), COUNT(*) FROM `testBug24886` GROUP BY `concat(Class,petallength)`");
@@ -3525,7 +3546,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
     public void testBug33678() throws Exception {
         createTable("testBug33678", "(field1 INT)");
 
-        Connection multiConn = getConnectionWithProps("allowMultiQueries=true,useSSL=false");
+        Connection multiConn = getConnectionWithProps("allowMultiQueries=true,useSSL=false,allowPublicKeyRetrieval=true");
         Statement multiStmt = multiConn.createStatement();
 
         try {
@@ -3650,7 +3671,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
     public void testBug34913() throws Exception {
         Timestamp ts = new Timestamp(new Date(109, 5, 1).getTime());
 
-        this.pstmt = ((com.mysql.cj.api.jdbc.JdbcConnection) this.conn).serverPrepareStatement("SELECT 'abcdefghij', ?");
+        this.pstmt = ((com.mysql.cj.jdbc.JdbcConnection) this.conn).serverPrepareStatement("SELECT 'abcdefghij', ?");
         this.pstmt.setTimestamp(1, ts);
         this.rs = this.pstmt.executeQuery();
         this.rs.next();
@@ -3754,7 +3775,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
 
         checkTimestampNanos();
 
-        this.rs = ((com.mysql.cj.api.jdbc.JdbcConnection) this.conn).serverPrepareStatement("SELECT '2008-09-26 15:47:20.797283'").executeQuery();
+        this.rs = ((com.mysql.cj.jdbc.JdbcConnection) this.conn).serverPrepareStatement("SELECT '2008-09-26 15:47:20.797283'").executeQuery();
         this.rs.next();
 
         checkTimestampNanos();
@@ -3773,7 +3794,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
     public void testBug38387() throws Exception {
         Connection noBlobConn = null;
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_functionsNeverReturnBlobs, "true");// toggle, no change
+        props.setProperty(PropertyKey.functionsNeverReturnBlobs.getKeyName(), "true");// toggle, no change
         noBlobConn = getConnectionWithProps(props);
         try {
             Statement noBlobStmt = noBlobConn.createStatement();
@@ -3808,8 +3829,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
         checkRanges();
         this.rs.close();
 
-        this.pstmt = ((com.mysql.cj.api.jdbc.JdbcConnection) c)
-                .serverPrepareStatement("SELECT int_field, long_field, double_field, string_field FROM testRanges");
+        this.pstmt = ((com.mysql.cj.jdbc.JdbcConnection) c).serverPrepareStatement("SELECT int_field, long_field, double_field, string_field FROM testRanges");
         this.rs = this.pstmt.executeQuery();
         this.rs.next();
         checkRanges();
@@ -3821,8 +3841,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
         checkRanges();
         this.rs.close();
 
-        this.pstmt = ((com.mysql.cj.api.jdbc.JdbcConnection) c)
-                .clientPrepareStatement("SELECT int_field, long_field, double_field, string_field FROM testRanges");
+        this.pstmt = ((com.mysql.cj.jdbc.JdbcConnection) c).clientPrepareStatement("SELECT int_field, long_field, double_field, string_field FROM testRanges");
         this.rs = this.pstmt.executeQuery();
         assertTrue(this.rs.next());
         checkRanges();
@@ -3965,12 +3984,12 @@ public class ResultSetRegressionTest extends BaseTestCase {
         try {
             if (versionMeetsMinimum(5, 7, 4)) {
                 Properties props = new Properties();
-                props.setProperty(PropertyDefinitions.PNAME_jdbcCompliantTruncation, "false");
+                props.setProperty(PropertyKey.jdbcCompliantTruncation.getKeyName(), "false");
                 if (versionMeetsMinimum(5, 7, 5)) {
                     String sqlMode = getMysqlVariable("sql_mode");
                     if (sqlMode.contains("STRICT_TRANS_TABLES")) {
                         sqlMode = removeSqlMode("STRICT_TRANS_TABLES", sqlMode);
-                        props.setProperty(PropertyDefinitions.PNAME_sessionVariables, "sql_mode='" + sqlMode + "'");
+                        props.setProperty(PropertyKey.sessionVariables.getKeyName(), "sql_mode='" + sqlMode + "'");
                     }
                 }
                 testConn = getConnectionWithProps(props);
@@ -3980,7 +3999,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
             createTable("bug32525", "(field1 date, field2 timestamp)");
             st.executeUpdate("INSERT INTO bug32525 VALUES ('0000-00-00', '0000-00-00 00:00:00')");
 
-            this.rs = ((com.mysql.cj.api.jdbc.JdbcConnection) noStringSyncConn).serverPrepareStatement("SELECT field1, field2 FROM bug32525").executeQuery();
+            this.rs = ((com.mysql.cj.jdbc.JdbcConnection) noStringSyncConn).serverPrepareStatement("SELECT field1, field2 FROM bug32525").executeQuery();
             this.rs.next();
             assertEquals("0000-00-00", this.rs.getString(1));
             assertEquals("0000-00-00 00:00:00", this.rs.getString(2));
@@ -4032,6 +4051,10 @@ public class ResultSetRegressionTest extends BaseTestCase {
     }
 
     public void testBug48820() throws Exception {
+        if (versionMeetsMinimum(8, 0, 5)) {
+            // old_passwords and PASSWORD() were removed since MySQL 8.0.5
+            return;
+        }
 
         CachedRowSet crs;
 
@@ -4078,7 +4101,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
         this.rs.close();
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useServerPrepStmts, "true");
+        props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), "true");
         Connection sspsCon = getConnectionWithProps(props);
         PreparedStatement ssPStmt = sspsCon.prepareStatement("select repeat('Z', 3000), now() + interval 1 microsecond");
         this.rs = ssPStmt.executeQuery();
@@ -4132,7 +4155,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
      */
     public void testBug64204() throws Exception {
         final Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_socketTimeout, "30000");
+        props.setProperty(PropertyKey.socketTimeout.getKeyName(), "30000");
 
         this.conn = getConnectionWithProps(props);
         this.conn.setCatalog("information_schema");
@@ -4270,8 +4293,8 @@ public class ResultSetRegressionTest extends BaseTestCase {
      */
     public void testBug67318() throws Exception {
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useServerPrepStmts, "true");
-        props.setProperty(PropertyDefinitions.PNAME_exceptionInterceptors, "testsuite.regression.ResultSetRegressionTest$TestBug67318ExceptionInterceptor");
+        props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), "true");
+        props.setProperty(PropertyKey.exceptionInterceptors.getKeyName(), "testsuite.regression.ResultSetRegressionTest$TestBug67318ExceptionInterceptor");
 
         Connection c = null;
         try {
@@ -4362,13 +4385,10 @@ public class ResultSetRegressionTest extends BaseTestCase {
                 return null;
             }
         });
-        assertThrows(SQLException.class, errorMessage, new Callable<Void>() {
-            public Void call() throws Exception {
-                testRS.getByte(1);
-                return null;
-            }
-        });
-        assertThrows(SQLException.class, errorMessage, new Callable<Void>() {
+
+        assertEquals(' ', testRS.getByte(1));
+
+        assertThrows(SQLException.class, "Cannot convert string ' ' to java.sql.Date value", new Callable<Void>() {
             public Void call() throws Exception {
                 testRS.getDate(1);
                 return null;
@@ -4404,13 +4424,13 @@ public class ResultSetRegressionTest extends BaseTestCase {
                 return null;
             }
         });
-        assertThrows(SQLException.class, errorMessage, new Callable<Void>() {
+        assertThrows(SQLException.class, "Cannot convert string ' ' to java.sql.Time value", new Callable<Void>() {
             public Void call() throws Exception {
                 testRS.getTime(1);
                 return null;
             }
         });
-        assertThrows(SQLException.class, errorMessage, new Callable<Void>() {
+        assertThrows(SQLException.class, "Cannot convert string ' ' to java.sql.Timestamp value", new Callable<Void>() {
             public Void call() throws Exception {
                 testRS.getTimestamp(1);
                 return null;
@@ -4663,16 +4683,17 @@ public class ResultSetRegressionTest extends BaseTestCase {
             sqlMode = removeSqlMode("NO_ZERO_DATE", sqlMode);
             props.put("sessionVariables", "sql_mode='" + sqlMode + "'");
         }
-        props.setProperty(PropertyDefinitions.PNAME_traceProtocol, "false");
-        props.setProperty(PropertyDefinitions.PNAME_defaultFetchSize, "5");
-        props.setProperty(PropertyDefinitions.PNAME_useCursorFetch, "true");
+        props.setProperty(PropertyKey.traceProtocol.getKeyName(), "false");
+        props.setProperty(PropertyKey.defaultFetchSize.getKeyName(), "5");
+        props.setProperty(PropertyKey.useCursorFetch.getKeyName(), "true");
         Connection testConn = getConnectionWithProps(props);
         Statement testStmt = testConn.createStatement();
 
         testStmt.executeUpdate("INSERT INTO testBug80522 VALUES ('00:00:00', '0000-00-00', 'Zeros')");
         final ResultSet testRs = testStmt.executeQuery("SELECT * FROM testBug80522");
         assertTrue(testRs.next());
-        assertEquals(new Timestamp(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse("1970-01-01 00:00:00").getTime()), testRs.getTimestamp(1));
+        assertEquals(new Timestamp(TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd HH:mm:ss", null, null).parse("1970-01-01 00:00:00").getTime()),
+                testRs.getTimestamp(1));
         assertThrows(SQLException.class, "Zero date value prohibited", new Callable<Void>() {
             public Void call() throws Exception {
                 System.out.println(testRs.getTimestamp(2));
@@ -4806,7 +4827,12 @@ public class ResultSetRegressionTest extends BaseTestCase {
                         + " b'1100110011001100110011001100110011001100', b'110011001100110011001100110011001100110011001100', b'11001100110011001100110011001100110011001100110011001100',"
                         + " b'1100110011001100110011001100110011001100110011001100110011001100', 0x00, -2)");
 
-        ResultSet rs1 = this.stmt.executeQuery("SELECT * FROM testBug22931433");
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.jdbcCompliantTruncation.getKeyName(), "false");
+        Connection testConn = getConnectionWithProps(props);
+        Statement testStmt = testConn.createStatement();
+
+        ResultSet rs1 = testStmt.executeQuery("SELECT * FROM testBug22931433");
         rs1.next();
 
         assertEquals('a', rs1.getByte("c1"));
@@ -5016,7 +5042,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
             // Test result set from prepared statements
             testCase = String.format("Case [useSPS: %s, StmtType: %s]", useServerPrepStmts ? "Y" : "N", "PrepStmt");
 
-            props.setProperty(PropertyDefinitions.PNAME_useServerPrepStmts, Boolean.toString(useServerPrepStmts));
+            props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), Boolean.toString(useServerPrepStmts));
             testConn = getConnectionWithProps(props);
             this.pstmt = testConn.prepareStatement("SELECT b1, b1 + 0, BIN(b1), b2, b2 + 0, BIN(b2), b3, b3 + 0, BIN(b3) FROM testBug78685");
             this.rs = this.pstmt.executeQuery();
@@ -5160,12 +5186,12 @@ public class ResultSetRegressionTest extends BaseTestCase {
         createProcedure("testBug80631SELECT", "() BEGIN SELECT * FROM testBug80631; END;");
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_characterEncoding, "UTF-8");
+        props.setProperty(PropertyKey.characterEncoding.getKeyName(), "UTF-8");
 
         boolean useSPS = false;
         do {
             final String testCase = String.format("Case: [SPS: %s]", useSPS ? "Y" : "N");
-            props.setProperty(PropertyDefinitions.PNAME_useServerPrepStmts, "" + useSPS);
+            props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), "" + useSPS);
             final Connection testConn = getConnectionWithProps(props);
 
             // Insert and select using a Statement.
@@ -5231,8 +5257,9 @@ public class ResultSetRegressionTest extends BaseTestCase {
 
         String[] docs = new String[] { "{\"key10\": \"value10\"}", "{\"key2\": \"value2\"}", "{\"key3\": \"value3\"}" };
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useSSL, "false");
-        props.setProperty(PropertyDefinitions.PNAME_useCursorFetch, "true");
+        props.setProperty(PropertyKey.useSSL.getKeyName(), "false");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+        props.setProperty(PropertyKey.useCursorFetch.getKeyName(), "true");
         Connection testConn = getConnectionWithProps(props);
 
         Statement testStmt = testConn.createStatement();
@@ -5353,7 +5380,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
             TimeZone.setDefault(TimeZone.getTimeZone("Europe/Berlin"));
 
             Properties props = new Properties();
-            props.setProperty(PropertyDefinitions.PNAME_serverTimezone, "Europe/Berlin");
+            props.setProperty(PropertyKey.serverTimezone.getKeyName(), "Europe/Berlin");
 
             ResultSet rs1 = getConnectionWithProps(props).createStatement().executeQuery("SELECT '2016-03-27 02:15:00'");
             assertTrue(rs1.next());
@@ -5361,7 +5388,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
             assertEquals(LocalDateTime.of(2016, 3, 27, 2, 15), rs1.getObject(1, LocalDateTime.class));
             assertEquals(LocalTime.of(2, 15), rs1.getObject(1, LocalTime.class));
             // "2016-03-27 02:15:00" is an impossible datetime for Europe/Berlin tz 
-            assertThrows(IllegalArgumentException.class, "HOUR_OF_DAY: 2 -> 3", new Callable<Void>() {
+            assertThrows(SQLException.class, "HOUR_OF_DAY: 2 -> 3", new Callable<Void>() {
                 public Void call() throws Exception {
                     rs1.getTimestamp(1).toLocalDateTime();
                     return null;
@@ -5369,7 +5396,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
             });
 
             // checking with ZeroDateTimeToNullValueFactory decorator
-            props.setProperty(PropertyDefinitions.PNAME_zeroDateTimeBehavior, "CONVERT_TO_NULL");
+            props.setProperty(PropertyKey.zeroDateTimeBehavior.getKeyName(), "CONVERT_TO_NULL");
             this.rs = getConnectionWithProps(props).createStatement().executeQuery("SELECT '0000-00-00 00:00:00'");
             assertTrue(this.rs.next());
             assertNull(this.rs.getObject(1, LocalDate.class));
@@ -5378,7 +5405,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
             assertFalse(this.rs.next());
 
             // checking with ZeroDateTimeToDefaultValueFactory decorator
-            props.setProperty(PropertyDefinitions.PNAME_zeroDateTimeBehavior, "ROUND");
+            props.setProperty(PropertyKey.zeroDateTimeBehavior.getKeyName(), "ROUND");
             this.rs = getConnectionWithProps(props).createStatement().executeQuery("SELECT '0000-00-00 00:00:00'");
             assertTrue(this.rs.next());
             assertEquals(LocalDate.of(1, 1, 1), this.rs.getObject(1, LocalDate.class));
@@ -5414,9 +5441,9 @@ public class ResultSetRegressionTest extends BaseTestCase {
 
         createTable("testBug24525461", sb.toString());
 
-        tstBug24525461testBytes("useSSL=false", testJSON); // CSPS
-        tstBug24525461testBytes("useSSL=false,useServerPrepStmts=true", testJSON); // SSPS without cursor
-        tstBug24525461testBytes("useSSL=false,useCursorFetch=true,defaultFetchSize=1", testJSON); // SSPS with cursor
+        tstBug24525461testBytes("useSSL=false,allowPublicKeyRetrieval=true", testJSON); // CSPS
+        tstBug24525461testBytes("useSSL=false,allowPublicKeyRetrieval=true,useServerPrepStmts=true", testJSON); // SSPS without cursor
+        tstBug24525461testBytes("useSSL=false,allowPublicKeyRetrieval=true,useCursorFetch=true,defaultFetchSize=1", testJSON); // SSPS with cursor
     }
 
     private void tstBug24525461testBytes(String params, boolean testJSON) throws Exception {
@@ -5665,9 +5692,10 @@ public class ResultSetRegressionTest extends BaseTestCase {
         this.stmt.execute("insert into testBug24527173 (a) values (101),(102),(103),(104)");
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useSSL, "false");
-        props.setProperty(PropertyDefinitions.PNAME_useCursorFetch, "true");
-        props.setProperty(PropertyDefinitions.PNAME_defaultFetchSize, "2");
+        props.setProperty(PropertyKey.useSSL.getKeyName(), "false");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+        props.setProperty(PropertyKey.useCursorFetch.getKeyName(), "true");
+        props.setProperty(PropertyKey.defaultFetchSize.getKeyName(), "2");
         Connection con = getConnectionWithProps(props);
 
         PreparedStatement ps = con.prepareStatement("select * from testBug24527173");
@@ -5686,7 +5714,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
         assertEquals(expectedResultClass, rs1.getClass());
 
         // ensure that cursor exists
-        Field f = MysqlaResultset.class.getDeclaredField("rowData");
+        Field f = NativeResultset.class.getDeclaredField("rowData");
         f.setAccessible(true);
         assertTrue(f.get(rs1).getClass().isAssignableFrom(ResultsetRowsCursor.class));
 
@@ -5752,12 +5780,12 @@ public class ResultSetRegressionTest extends BaseTestCase {
      *             if the test fails
      */
     public void testBug23702040() throws Exception {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
-        sdf.setTimeZone(TimeZone.getTimeZone("Europe/Bucharest"));
+        SimpleDateFormat sdf = TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd", null, TimeZone.getTimeZone("Europe/Bucharest"));
         sdf.setLenient(false);
 
         java.util.Date expected = sdf.parse("1994-03-27");
-        Date fromFactory = new SqlDateValueFactory(TimeZone.getTimeZone("Europe/Bucharest")).createFromDate(1994, 3, 27);
+        Date fromFactory = new SqlDateValueFactory(new DefaultPropertySet(), null, TimeZone.getTimeZone("Europe/Bucharest"))
+                .createFromDate(new InternalDate(1994, 3, 27));
 
         assertEquals(expected.getTime(), fromFactory.getTime());
     }
@@ -5807,7 +5835,8 @@ public class ResultSetRegressionTest extends BaseTestCase {
 
         // test 1 - OK
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useSSL, "false");
+        props.setProperty(PropertyKey.useSSL.getKeyName(), "false");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
         Connection conn1 = getConnectionWithProps(props);
         PreparedStatement pstm1 = conn1.prepareStatement("select id, val_one, val_blob, val_three from testBug25215008 where val_one = ?");
         pstm1.setString(1, VALUE_ONE);
@@ -5822,7 +5851,7 @@ public class ResultSetRegressionTest extends BaseTestCase {
         // then test with useServerPrepStmts=true
 
         // - test 2 - OK
-        props.setProperty(PropertyDefinitions.PNAME_useServerPrepStmts, "true");
+        props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), "true");
         Connection conn2 = getConnectionWithProps(props);
         PreparedStatement pstm2 = conn2.prepareStatement("select id, val_one, val_three from testBug25215008 where val_one = ?"); // let's not request val_blob for now
         pstm2.setString(1, VALUE_ONE);
@@ -6011,5 +6040,910 @@ public class ResultSetRegressionTest extends BaseTestCase {
                 }
             }
         }
+    }
+
+    /**
+     * Tests for fix to BUG#25650305 - GETDATE(),GETTIME() AND GETTIMESTAMP() CALL WITH NULL CALENDAR RETURNS NPE
+     *
+     * @throws Exception
+     *             if the test fails
+     */
+    public void testBug25650305() throws Exception {
+        if (!versionMeetsMinimum(5, 6, 4)) {
+            return; // fractional seconds are not supported in previous versions
+        }
+
+        createTable("testBug25650305", "(c1 timestamp(5))");
+        this.stmt.executeUpdate("INSERT INTO testBug25650305 VALUES ('2031-01-15 03:14:07.339999')");
+
+        Calendar cal = Calendar.getInstance();
+
+        Connection testConn;
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.useSSL.getKeyName(), "false");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+        testConn = getConnectionWithProps(props);
+        this.rs = testConn.createStatement().executeQuery("SELECT * FROM testBug25650305");
+        this.rs.next();
+
+        assertEquals("2031-01-15", this.rs.getDate(1).toString());
+        assertEquals("2031-01-15", this.rs.getDate(1, cal).toString());
+        assertEquals("2031-01-15", this.rs.getDate(1, null).toString());
+
+        assertEquals("03:14:07", this.rs.getTime(1).toString());
+        assertEquals("03:14:07", this.rs.getTime(1, cal).toString());
+        assertEquals("03:14:07", this.rs.getTime(1, null).toString());
+
+        assertEquals("2031-01-15 03:14:07.34", this.rs.getTimestamp(1).toString());
+        assertEquals("2031-01-15 03:14:07.34", this.rs.getTimestamp(1, cal).toString());
+        assertEquals("2031-01-15 03:14:07.34", this.rs.getTimestamp(1, null).toString());
+
+        testConn.close();
+    }
+
+    /**
+     * Tests for fix to BUG#26750705 - MASTER : ERROR - UNSUPPORTED CONVERSION FROM TIME TO JAVA.SQL.DATE
+     *
+     * @throws Exception
+     *             if the test fails
+     */
+    public void testBug26750705() throws Exception {
+        if (!versionMeetsMinimum(5, 6, 4)) {
+            return; // fractional seconds are not supported in previous versions
+        }
+
+        createTable("testBug26750705", "(c1 time(3), c2 time(3))");
+        this.stmt.execute("insert into testBug26750705 values('80:59:59','8:59:59.01')");
+
+        long expected1 = 80 * 60 * 60 * 1000 + 59 * 60 * 1000 + 59 * 1000; // '80:59:59' in milliseconds
+        long expected2 = 8 * 60 * 60 * 1000 + 59 * 60 * 1000 + 59 * 1000 + 10; // '8:59:59.01' in milliseconds
+
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.useSSL.getKeyName(), "false");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+        Connection testConn = getConnectionWithProps(props);
+
+        PreparedStatement ps = testConn.prepareStatement("select * from testBug26750705", ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_READ_ONLY);
+        this.rs = ps.executeQuery();
+
+        assertNotNull(this.rs.next());
+        assertEquals(expected1, this.rs.getDate(1, null).getTime());
+        assertEquals(expected2, this.rs.getDate(2, null).getTime());
+
+        // at least 2 warnings are expected 
+        SQLWarning w = this.rs.getWarnings();
+        assertNotNull(w);
+
+        int cnt = 2;
+        String expectedWarning = Messages.getString("ResultSet.ImplicitDatePartWarning", new Object[] { "java.sql.Date" });
+        while (w != null) {
+            if (expectedWarning.equals(w.getMessage())) {
+                cnt--;
+            }
+            w = w.getNextWarning();
+        }
+        assertEquals(0, cnt);
+
+        testConn.close();
+    }
+
+    /**
+     * Tests for fix to BUG#26266731 - CONCUR_UPDATABLE RESULTSET OPERATIONS FAIL AGAINST 8.0 FOR BOOLEAN COLUMN
+     *
+     * @throws Exception
+     *             if the test fails
+     */
+    public void testBug26266731() throws Exception {
+        this.rs = null;
+
+        createTable("testBug26266731", "(c1 int,c2 char(10),c3 float,c4 double,c5 bigint,c6 blob,c7 bool,c8 date,c9 timestamp NULL,c10 time,"
+                + "c11 mediumint,c12 varchar(100),c13 binary(10),  primary key(c1,c5,c7))", "InnoDB");
+        this.stmt.executeUpdate("insert into testBug26266731 values(1,'a',1.1,1.1,1,'1',true,'2013-03-25','2013-03-25 01:01:01.01','01:01:01',1,'1','1')");
+        this.stmt.executeUpdate("insert into testBug26266731 values(2,'b',2.2,2.2,2,'2',true,'2014-03-25','2014-03-25 02:02:02.02','02:02:02',2,'2','2')");
+        this.stmt.executeUpdate("insert into testBug26266731 values(3,'c',3.3,3.3,3,'3',true,'2015-03-25','2015-03-25 03:03:03.03','03:03:03',3,'3','3')");
+
+        assertEquals(3, getRowCount("testBug26266731"));
+
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.characterEncoding.getKeyName(), "UTF-8");
+        Connection c = getConnectionWithProps(props);
+
+        this.pstmt = c.prepareStatement("SELECT * FROM testBug26266731 order by c1", ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
+        this.rs = this.pstmt.executeQuery();
+
+        if (this.rs.next()) {
+            this.rs.absolute(2);
+            this.rs.deleteRow();
+        }
+
+        assertEquals(2, getRowCount("testBug26266731"));
+    }
+
+    /**
+     * Tests for fix to BUG#85941 (25924324), WASNULL NOT SET AFTER GETBYTES IS CALLED
+     *
+     * @throws Exception
+     *             if the test fails
+     */
+    public void testBug85941() throws Exception {
+        createTable("testBug85941", "(strField VARCHAR(1), bitField TEXT)");
+        this.stmt.executeUpdate("insert into testBug85941 values(NULL, 1)");
+
+        this.rs = this.stmt.executeQuery("SELECT strField, bitField FROM testBug85941");
+        this.rs.next();
+
+        assertNull(this.rs.getString(1));
+        assertTrue(this.rs.wasNull());
+
+        assertEquals("1".getBytes()[0], this.rs.getBytes(2)[0]);
+        assertFalse(this.rs.wasNull());
+    }
+
+    /**
+     * Tests fix for Bug#22305979, WRONG RECORD UPDATED IF SENDFRACTIONALSECONDS=FALSE AND SMT IS SCROLLABLE.
+     */
+    public void testBug22305979() throws Exception {
+        if (!versionMeetsMinimum(5, 6, 4)) {
+            return; // fractional seconds are not supported in previous versions
+        }
+
+        /* Test from bug report */
+        Connection testConn2;
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.useSSL.getKeyName(), "false");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+        props.setProperty(PropertyKey.sendFractionalSeconds.getKeyName(), "false");
+
+        for (String serverTimezone : new String[] { null, "GMT", "Asia/Calcutta" }) {
+            System.out.println("serverTimezone=" + serverTimezone);
+            if (serverTimezone != null) {
+                props.setProperty(PropertyKey.serverTimezone.getKeyName(), serverTimezone);
+            }
+            testConn2 = getConnectionWithProps(props);
+
+            Timestamp ts2 = new Timestamp(TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd HH:mm:ss.SSS", null, null).parse("2019-12-30 13:59:57.789").getTime());
+            createTable("testBug22305979_orig_1",
+                    "(id int, tmp int,ts1 timestamp(6),ts2 timestamp(3) NOT NULL DEFAULT '2001-01-01 00:00:01',primary key(id,ts1) )");
+            this.stmt.execute("insert into testBug22305979_orig_1 values (1,100,'2014-12-31 23:59:59.123','2015-12-31 23:59:59.456')");
+            this.stmt.execute("insert into testBug22305979_orig_1 values (1,200,'2014-12-31 23:59:59','2022-12-31 23:59:59.456')");
+
+            Statement scrollableStmt = testConn2.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_UPDATABLE);
+            ResultSet rs1 = scrollableStmt.executeQuery("SELECT * FROM testBug22305979_orig_1 where id=1 and ts1='2014-12-31 23:59:59.123'");
+            if (rs1.next()) {
+                rs1.updateTimestamp(3, ts2); //Updating part of primary key
+                rs1.updateRow();
+            }
+
+            this.rs = scrollableStmt.executeQuery("SELECT * FROM testBug22305979_orig_1 order by tmp");
+            assertTrue(this.rs.next());
+            assertEquals(1, this.rs.getInt(1));
+            assertEquals(100, this.rs.getInt(2));
+            assertEquals("2019-12-30 13:59:57.0", this.rs.getTimestamp(3).toString());
+            // TODO this.rs.getString(3) here doesn't take into account the serverTimezone thus returns the value as it is stored in table; is it a bug?
+            // assertEquals("2019-12-30 13:59:57", this.rs.getString(3));
+            assertEquals("2015-12-31 23:59:59.456000000", this.rs.getString(4));
+            assertTrue(this.rs.next());
+            assertEquals(1, this.rs.getInt(1));
+            assertEquals(200, this.rs.getInt(2));
+            assertEquals("2014-12-31 23:59:59", this.rs.getString(3)); // we didn't change this date, so getString() matches the getTimestamp()
+            assertEquals("2022-12-31 23:59:59.456000000", this.rs.getString(4));
+        }
+
+        /* Unified test */
+
+        // Original values we insert
+        Timestamp[] ts_ins = new Timestamp[] { //
+                Timestamp.valueOf("2018-07-09 13:14:15"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.1"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.12"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.123"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.1234"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.12345"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.123456"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.1234567"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.12345678"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.999999999") };
+
+        // Values we expect in DB after insert operation if TIME_TRUNCATE_FRACTIONAL sql_mode is unset
+        Timestamp[] ts_ins_expected_round = new Timestamp[] { //
+                Timestamp.valueOf("2018-07-09 13:14:15"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.1"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.12"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.123"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.1234"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.12345"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.123456"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.123457"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.123457"), //
+                Timestamp.valueOf("2018-07-09 13:14:16.0") };
+
+        // Values we expect in DB after insert operation if TIME_TRUNCATE_FRACTIONAL sql_mode is set
+        Timestamp[] ts_ins_expected_truncate = new Timestamp[] { //
+                Timestamp.valueOf("2018-07-09 13:14:15"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.1"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.12"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.123"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.1234"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.12345"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.123456"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.123456"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.123456"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.999999") };
+
+        // Values we expect in DB after insert operation if sendFractionalSeconds=false
+        Timestamp[] ts_ins_expected_not_sendFractionalSeconds = new Timestamp[] { //
+                Timestamp.valueOf("2018-07-09 13:14:15"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 13:14:15.0") };
+
+        // Original values we pass to update operation
+        Timestamp[] ts_upd = new Timestamp[] { //
+                Timestamp.valueOf("2018-07-09 03:14:15"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.1"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.12"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.123"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.1234"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.12345"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.123456"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.1234567"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.12345678"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.999999999") };
+
+        // Values we expect in DB after update operation if TIME_TRUNCATE_FRACTIONAL sql_mode is unset
+        Timestamp[] ts_upd_expected_round = new Timestamp[] { //
+                Timestamp.valueOf("2018-07-09 03:14:15"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.1"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.12"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.123"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.1234"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.12345"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.123456"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.123457"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.123457"), //
+                Timestamp.valueOf("2018-07-09 03:14:16.0") };
+
+        // Values we expect in DB after update operation if TIME_TRUNCATE_FRACTIONAL sql_mode is set
+        Timestamp[] ts_upd_expected_truncate = new Timestamp[] { //
+                Timestamp.valueOf("2018-07-09 03:14:15"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.1"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.12"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.123"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.1234"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.12345"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.123456"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.123457"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.123457"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.999999") };
+
+        // Values we expect in DB after update operation if sendFractionalSeconds=false
+        Timestamp[] ts_upd_expected_not_sendFractionalSeconds = new Timestamp[] { //
+                Timestamp.valueOf("2018-07-09 03:14:15"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.0"), //
+                Timestamp.valueOf("2018-07-09 03:14:15.0") };
+
+        Connection testConn;
+
+        boolean sqlModeTimeTruncateFractional = false;
+        boolean sendFractionalSeconds = false;
+        boolean useServerPrepStmts = false;
+
+        do {
+            // TIME_TRUNCATE_FRACTIONAL was added in MySQL 8.0
+            if (sqlModeTimeTruncateFractional && !versionMeetsMinimum(8, 0)) {
+                continue;
+            }
+            for (String serverTimezone : new String[] { null, "GMT", "Asia/Calcutta" }) {
+                if (serverTimezone != null) {
+                    props.setProperty(PropertyKey.serverTimezone.getKeyName(), serverTimezone);
+                } else {
+                    props.remove(PropertyKey.serverTimezone);
+                }
+
+                final String testCase = String.format("Case: [TIME_TRUNCATE_FRACTIONAL=%s, sendFractionalSeconds=%s, useServerPrepStmts=%s,",
+                        sqlModeTimeTruncateFractional ? "Y" : "N", sendFractionalSeconds ? "Y" : "N", useServerPrepStmts ? "Y" : "N");
+                System.out.println(testCase);
+
+                String sqlMode = getMysqlVariable("sql_mode");
+                sqlMode = removeSqlMode("TIME_TRUNCATE_FRACTIONAL", sqlMode);
+                if (sqlModeTimeTruncateFractional) {
+                    if (sqlMode.length() > 0) {
+                        sqlMode += ",";
+                    }
+                    sqlMode += "TIME_TRUNCATE_FRACTIONAL";
+                }
+
+                props.setProperty(PropertyKey.sessionVariables.getKeyName(), "sql_mode='" + sqlMode + "'");
+                props.setProperty(PropertyKey.sendFractionalSeconds.getKeyName(), "" + sendFractionalSeconds);
+                props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), "" + useServerPrepStmts);
+
+                testConn = getConnectionWithProps(props);
+
+                // specifying different fractional length
+                for (int len = 0; len < 10; len++) {
+
+                    int fieldLen = len > 6 ? 6 : len;
+                    //System.out.println("len: " + len);
+
+                    String tableName = "testBug22305979_" + len;
+                    createTable(tableName,
+                            "(id INTEGER, dt DATETIME" + (fieldLen == 0 ? "" : "(" + fieldLen + ")") + ", ts TIMESTAMP"
+                                    + (fieldLen == 0 ? "" : "(" + fieldLen + ")") + ", tm TIME" + (fieldLen == 0 ? "" : "(" + fieldLen + ")")
+                                    + ", PRIMARY KEY(id,dt,ts,tm))");
+
+                    Statement st = testConn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_UPDATABLE);
+                    this.rs = st.executeQuery("SELECT id,dt,ts,tm FROM " + tableName + " FOR UPDATE");
+                    this.rs.next(); // No rows
+                    this.rs.moveToInsertRow();
+                    this.rs.updateInt("id", 1);
+                    this.rs.updateTimestamp("dt", ts_ins[len]);
+                    this.rs.updateTimestamp("ts", ts_ins[len]);
+                    this.rs.updateTime("tm", new Time(ts_ins[len].getTime()));
+                    this.rs.insertRow();
+                    assertTrue(testCase, this.rs.last());
+
+                    // checking only seconds and nanos, other date parts are not relevant to this bug
+                    Calendar c_exp = new GregorianCalendar();
+                    c_exp.setTime(sendFractionalSeconds ? (sqlModeTimeTruncateFractional ? ts_ins_expected_truncate[len] : ts_ins_expected_round[len])
+                            : ts_ins_expected_not_sendFractionalSeconds[len]);
+                    Calendar c_res = new GregorianCalendar();
+                    c_res.setTime(this.rs.getTimestamp("dt"));
+                    assertEquals(testCase, c_exp.get(Calendar.SECOND), c_res.get(Calendar.SECOND));
+                    assertEquals(testCase, c_exp.get(Calendar.MILLISECOND), c_res.get(Calendar.MILLISECOND));
+                    c_res.setTime(this.rs.getTimestamp("ts"));
+                    assertEquals(testCase, c_exp.get(Calendar.SECOND), c_res.get(Calendar.SECOND));
+                    assertEquals(testCase, c_exp.get(Calendar.MILLISECOND), c_res.get(Calendar.MILLISECOND));
+
+                    // TODO java.sql.Time does not provide any way for setting/getting milliseconds and removes them from toString() method.
+                    // So the rs.updateTime(String columnName, java.sql.Time x) will always truncate milliseconds. Probably it is a bug because
+                    // java.sql.Time contains milliseconds internally. We have a Bug#76775 feature request about that.
+                    if (sendFractionalSeconds) {
+                        c_exp.setTime(ts_ins_expected_truncate[len]);
+                    }
+                    c_res.setTime(this.rs.getTime("tm"));
+                    assertEquals(testCase, c_exp.get(Calendar.SECOND), c_res.get(Calendar.SECOND));
+                    assertEquals(testCase, 0, c_res.get(Calendar.MILLISECOND));
+
+                    this.rs.updateTimestamp("dt", ts_upd[len]);
+                    this.rs.updateTimestamp("ts", ts_upd[len]);
+                    this.rs.updateTime("tm", new Time(ts_upd[len].getTime()));
+                    this.rs.updateRow();
+                    c_exp.setTime(sendFractionalSeconds ? (sqlModeTimeTruncateFractional ? ts_upd_expected_truncate[len] : ts_upd_expected_round[len])
+                            : ts_upd_expected_not_sendFractionalSeconds[len]);
+                    c_res.setTime(this.rs.getTimestamp("dt"));
+                    assertEquals(testCase, c_exp.get(Calendar.SECOND), c_res.get(Calendar.SECOND));
+                    assertEquals(testCase, c_exp.get(Calendar.MILLISECOND), c_res.get(Calendar.MILLISECOND));
+                    c_res.setTime(this.rs.getTimestamp("ts"));
+                    assertEquals(testCase, c_exp.get(Calendar.SECOND), c_res.get(Calendar.SECOND));
+                    assertEquals(testCase, c_exp.get(Calendar.MILLISECOND), c_res.get(Calendar.MILLISECOND));
+
+                    if (sendFractionalSeconds) {
+                        c_exp.setTime(ts_upd_expected_truncate[len]);
+                    }
+                    c_res.setTime(this.rs.getTime("tm"));
+                    assertEquals(testCase, c_exp.get(Calendar.SECOND), c_res.get(Calendar.SECOND));
+                    assertEquals(testCase, 0, c_res.get(Calendar.MILLISECOND));
+
+                    st.close();
+                }
+
+                testConn.close();
+            }
+        } while ((sqlModeTimeTruncateFractional = !sqlModeTimeTruncateFractional) || (sendFractionalSeconds = !sendFractionalSeconds)
+                || (useServerPrepStmts = !useServerPrepStmts));
+
+    }
+
+    /**
+     * Tests fix for Bug#80532 (22847443), ENCODING OF RESULTSET.UPDATEROW IS BROKEN FOR NON ASCII CHARCTERS.
+     */
+    public void testBug80532() throws Exception {
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.useSSL.getKeyName(), "false");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+
+        for (String enc : new String[] { "ISO8859_1", "UTF-8" }) {
+            for (String useSSPS : new String[] { "false", "true" }) {
+                final String testCase = String.format("Case: [characterEncoding=%s, useServerPrepStmts=%s]", enc, useSSPS);
+                System.out.println(testCase);
+
+                createTable("testBug80532", "(id char(50) NOT NULL, data longtext, num int, PRIMARY KEY (id,num)) CHARACTER SET "
+                        + (versionMeetsMinimum(5, 5) ? "utf8mb4" : "utf8"));
+
+                props.setProperty(PropertyKey.characterEncoding.getKeyName(), enc);
+                props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), useSSPS);
+
+                Connection c1 = getConnectionWithProps(props);
+
+                String id1 = "äöü";
+                String id2 = "öäü";
+                String data1 = "my data";
+                String data2 = "new data";
+
+                c1.createStatement().executeUpdate("INSERT INTO testBug80532(id,data,num) VALUES( '" + id1 + "', '" + data1 + "', 1 )");
+
+                Statement st = this.conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
+                this.rs = st.executeQuery("select * From testBug80532"); // where id='" + id1 + "'"
+                this.rs.next();
+
+                System.out.println(this.rs.getString("id") + ", " + this.rs.getString("data"));
+                assertEquals(id1, this.rs.getString("id"));
+                assertEquals(data1, this.rs.getString("data"));
+                this.rs.updateString("data", data2);
+                this.rs.updateRow();
+                System.out.println(this.rs.getString("id") + ", " + this.rs.getString("data"));
+                assertEquals(id1, this.rs.getString("id"));
+                assertEquals(data2, this.rs.getString("data"));
+
+                this.rs.moveToInsertRow();
+                this.rs.updateString("id", id2);
+                this.rs.updateString("data", data1);
+                this.rs.updateInt("num", 2);
+                this.rs.insertRow();
+                assertTrue(this.rs.last());
+                System.out.println(this.rs.getString("id") + ", " + this.rs.getString("data"));
+                assertEquals(id2, this.rs.getString("id"));
+                assertEquals(data1, this.rs.getString("data"));
+
+                this.rs.updateString("id", id1);
+                this.rs.updateRow();
+                System.out.println(this.rs.getString("id") + ", " + this.rs.getString("data"));
+                assertEquals(id1, this.rs.getString("id"));
+                assertEquals(data1, this.rs.getString("data"));
+            }
+        }
+    }
+
+    /**
+     * Tests fix for Bug#72609 (18749544), SETDATE() NOT USING A PROLEPTIC GREGORIAN CALENDAR.
+     */
+    public void testBug72609() throws Exception {
+        GregorianCalendar prolepticGc = new GregorianCalendar();
+        prolepticGc.setGregorianChange(new Date(Long.MIN_VALUE));
+        prolepticGc.clear();
+        prolepticGc.set(Calendar.DAY_OF_MONTH, 8);
+        prolepticGc.set(Calendar.MONTH, Calendar.OCTOBER);
+        prolepticGc.set(Calendar.YEAR, 1582);
+
+        GregorianCalendar gc = new GregorianCalendar();
+        gc.clear();
+        gc.setTimeInMillis(prolepticGc.getTimeInMillis());
+
+        assertEquals(1582, gc.get(Calendar.YEAR));
+        assertEquals(8, gc.get(Calendar.MONTH));
+        assertEquals(28, gc.get(Calendar.DAY_OF_MONTH));
+
+        // TIMESTAMP can't represent dates before 1970-01-01, so we need to test only DATE and DATETIME types
+        createTable("testBug72609", "(d date, pd date, dt datetime, pdt datetime)");
+
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.useSSL.getKeyName(), "false");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+
+        boolean sendFractionalSeconds = false;
+        boolean useServerPrepStmts = false;
+
+        do {
+            final String testCase = String.format("Case: [sendFractionalSeconds=%s, useServerPrepStmts=%s]", sendFractionalSeconds ? "Y" : "N",
+                    useServerPrepStmts ? "Y" : "N");
+            System.out.println(testCase);
+
+            props.setProperty(PropertyKey.sendFractionalSeconds.getKeyName(), "" + sendFractionalSeconds);
+            props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), "" + useServerPrepStmts);
+
+            Connection c1 = getConnectionWithProps(props);
+            Statement st1 = c1.createStatement();
+
+            st1.execute("truncate table testBug72609");
+
+            java.sql.Date d1 = new java.sql.Date(prolepticGc.getTime().getTime());
+            Timestamp ts1 = new Timestamp(prolepticGc.getTime().getTime());
+
+            this.pstmt = c1.prepareStatement("insert into testBug72609 values(?,?,?,?)");
+            this.pstmt.setDate(1, d1);
+            this.pstmt.setDate(2, d1, prolepticGc);
+            this.pstmt.setTimestamp(3, ts1);
+            this.pstmt.setTimestamp(4, ts1, prolepticGc);
+            this.pstmt.execute();
+
+            /*
+             * Checking stored values by retrieving them as strings to avoid conversions on c/J side.
+             */
+            this.rs = st1.executeQuery("select DATE_FORMAT(d, '%Y-%m-%d') as d, DATE_FORMAT(pd, '%Y-%m-%d') as pd,"
+                    + " DATE_FORMAT(dt, '%Y-%m-%d %H:%i:%s.%f') as dt, DATE_FORMAT(pdt, '%Y-%m-%d %H:%i:%s.%f') as pdt from testBug72609");
+            this.rs.next();
+            System.out.println(this.rs.getString(1) + ", " + this.rs.getString(2) + ", " + this.rs.getString(3) + ", " + this.rs.getString(4));
+
+            assertEquals(testCase, "1582-09-28", this.rs.getString(1)); // according to Julian calendar
+            assertEquals(testCase, "1582-10-08", this.rs.getString(2)); // according to proleptic Gregorian calendar
+
+            // the exact day depends on adjustments between time zones, but that's not interesting for this test
+            assertTrue(testCase, this.rs.getString(3).startsWith("1582-09-2"));
+            assertTrue(testCase, this.rs.getString(4).startsWith("1582-10-0"));
+
+            /*
+             * Getting stored values back.
+             * 
+             * Default Julian to Gregorian calendar switch is: October 4, 1582 (Julian) is followed by October 15, 1582 (Gregorian).
+             * So when default non-proleptic calendar is used the given 1582-10-08 date is in a "missing" period. In this case GregorianCalendar
+             * uses a Julian calendar system for counting date in milliseconds, thus adding another 10 days to the date and returning 1582-10-18.
+             * 
+             * With explicit proleptic calendar we get the symmetric back conversion.
+             */
+            ResultSet rs1 = this.stmt.executeQuery("select * from testBug72609");
+            rs1.next();
+
+            assertEquals(testCase, "1582-09-28", rs1.getDate(1).toString());
+
+            assertThrows(SQLException.class, "the specified date doesn't exist", new Callable<Void>() {
+                public Void call() throws Exception {
+                    // 1582-10-18 can't be represented because it falls to "missed" period in a Julian->Gregorian switch
+                    rs1.getDate(2).toString();
+                    return null;
+                }
+            });
+            assertEquals(testCase, "1582-09-28", rs1.getDate(2, prolepticGc).toString()); // according to proleptic Gregorian calendar
+
+            assertTrue(rs1.getTimestamp(3).toString().startsWith("1582-09-2"));
+
+            // the exact day depends on adjustments between time zones, but that's not interesting for this test
+            assertThrows(SQLException.class, "the specified date doesn't exist", new Callable<Void>() {
+                public Void call() throws Exception {
+                    // 1582-10-18 can't be represented because it falls to "missed" period in a Julian->Gregorian switch
+                    rs1.getTimestamp(4).toString();
+                    return null;
+                }
+            });
+            assertTrue(rs1.getTimestamp(4, prolepticGc).toString().startsWith("1582-09-2")); // according to proleptic Gregorian calendar
+
+            c1.close();
+
+        } while ((sendFractionalSeconds = !sendFractionalSeconds) || (useServerPrepStmts = !useServerPrepStmts));
+    }
+
+    /**
+     * Tests for fix to BUG#92574 (28706219), WHEN CONVERTING FROM VARCHAR TO JAVA BOOLEAN, 'N' IS NOT SUPPORTED.
+     *
+     * @throws Exception
+     *             if the test fails
+     */
+    public void testBug92574() throws Exception {
+        String[] strValues = new String[] { null, "N", "n", "Y", "y", "0", "1" };
+        boolean[] boolValues = new boolean[] { false, false, false, true, true, false, true };
+
+        createTable("testBug92574", "(id int not null, f varchar(1), key(id))");
+        for (int i = 0; i < strValues.length; i++) {
+            String val = strValues[i] == null ? null : "'" + strValues[i] + "'";
+            this.stmt.executeUpdate("insert into testBug92574 values(" + i + "," + val + ")");
+        }
+        this.rs = this.stmt.executeQuery("SELECT * from testBug92574");
+        while (this.rs.next()) {
+            int i = this.rs.getInt(1);
+            assertEquals(strValues[i], this.rs.getString(2));
+            assertEquals(boolValues[i], this.rs.getBoolean(2));
+        }
+    }
+
+    /**
+     * Tests fix for Bug#91065 (28101003), ZERODATETIMEBEHAVIOR=CONVERT_TO_NULL SHOULD NOT APPLY TO 00:00:00 TIME COLUMNS.
+     */
+    public void testBug91065() throws Exception {
+        createTable("testBug91065", "(theTimeField time DEFAULT NULL)");
+        this.stmt.executeUpdate("insert into testBug91065 values('00:00:00')");
+
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.sslMode.getKeyName(), "DISABLED");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+        props.setProperty(PropertyKey.zeroDateTimeBehavior.getKeyName(), "CONVERT_TO_NULL");
+        Connection con = getConnectionWithProps(props);
+        Statement st = con.createStatement();
+
+        this.rs = st.executeQuery("SELECT theTimeField FROM testBug91065");
+        assertTrue(this.rs.next());
+        Time theTime = this.rs.getTime("theTimeField");
+        assertNotNull(theTime);
+        assertEquals(Time.valueOf("00:00:00"), theTime);
+    }
+
+    /**
+     * Tests fix for Bug#92536 (28692243), UPDATEING SERVER SIDE PREPSTMTS RESULTSET FAIL.
+     */
+    public void testBug92536() throws Exception {
+        createTable("testBug92536", "(`key` VARCHAR(45) NOT NULL, `value` BIGINT(20) NOT NULL,  PRIMARY KEY (`key`))");
+        this.stmt.executeUpdate("INSERT INTO `testBug92536` VALUES ('key', 0)");
+
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.sslMode.getKeyName(), "DISABLED");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+        for (String useSSPS : new String[] { "false", "true" }) {
+            props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), useSSPS);
+            Connection c1 = getConnectionWithProps(props);
+            try (PreparedStatement stmt1 = c1.prepareStatement("SELECT `key`, `value` FROM `testBug92536` WHERE `key`=? FOR UPDATE",
+                    ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE)) {
+                stmt1.setString(1, "key");
+                try (ResultSet res = stmt1.executeQuery()) {
+                    res.next();
+                    res.updateLong("value", 1);
+                    res.updateRow();
+                    res.refreshRow();
+
+                    assertEquals("key", res.getString(1));
+                    assertEquals(1, res.getInt(2));
+                }
+            }
+            c1.close();
+
+            this.rs = this.stmt.executeQuery("select * from testBug92536");
+            this.rs.next();
+            assertEquals("key", this.rs.getString(1));
+            assertEquals(1, this.rs.getInt(2));
+        }
+    }
+
+    /**
+     * Tests fix for Bug#25650482, REFRESHROW() CALL AFTER UPDATEROW() API FAILS WHEN USESERVERPREPSTMTS=TRUE.
+     */
+    public void testBug25650482() throws Exception {
+        createTable("testBug25650482", "(c1 int, c2 char(10),  primary key(c1))");
+        this.stmt.executeUpdate("INSERT INTO `testBug25650482` VALUES (1, 'a')");
+
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.sslMode.getKeyName(), "DISABLED");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+
+        for (String useSSPS : new String[] { "false", "true" }) {
+            props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), useSSPS);
+            Connection c1 = getConnectionWithProps(props);
+            try (PreparedStatement ps1 = c1.prepareStatement("SELECT * FROM `testBug25650482` order by c1 asc", ResultSet.TYPE_SCROLL_SENSITIVE,
+                    ResultSet.CONCUR_UPDATABLE)) {
+                try (ResultSet res = ps1.executeQuery()) {
+                    res.absolute(1);
+                    res.updateInt(1, res.getInt(1));
+                    res.updateString(2, "100");
+                    res.updateRow();
+                    res.refreshRow();
+
+                    assertEquals(1, res.getInt(1));
+                    assertEquals("100", res.getString(2));
+                }
+            }
+            c1.close();
+
+            this.rs = this.stmt.executeQuery("select * from testBug25650482");
+            this.rs.next();
+            assertEquals(1, this.rs.getInt(1));
+            assertEquals("100", this.rs.getString(2));
+        }
+    }
+
+    /**
+     * Tests fix for Bug#25650514, UPDATEROW() CALL FAILS WITH NPE WHEN SSPS=TRUE AND TABLE HAS MULTI-FLD KEY.
+     */
+    public void testBug25650514() throws Exception {
+        createTable("testBug25650514", "(c1 int,c2 char(10),  primary key(c1,c2))");
+        this.stmt.executeUpdate("INSERT INTO `testBug25650514` VALUES (1, 'a')");
+
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.sslMode.getKeyName(), "DISABLED");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+
+        for (String useSSPS : new String[] { "false", "true" }) {
+            props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), useSSPS);
+            Connection c1 = getConnectionWithProps(props);
+            try (PreparedStatement ps1 = c1.prepareStatement("SELECT * FROM `testBug25650514` order by c1 asc", ResultSet.TYPE_SCROLL_SENSITIVE,
+                    ResultSet.CONCUR_UPDATABLE)) {
+                try (ResultSet res = ps1.executeQuery()) {
+                    res.absolute(1);
+                    res.updateInt(1, res.getInt(1));
+                    res.updateString(2, "100");
+                    res.updateRow();
+                    res.refreshRow();
+
+                    assertEquals(1, res.getInt(1));
+                    assertEquals("100", res.getString(2));
+                }
+            }
+            c1.close();
+
+            this.rs = this.stmt.executeQuery("select * from testBug25650514");
+            this.rs.next();
+            assertEquals(1, this.rs.getInt(1));
+            assertEquals("100", this.rs.getString(2));
+        }
+    }
+
+    /**
+     * Tests fix for BUG#25650385, GETBYTE() RETURNS ERROR FOR BINARY() FLD.
+     *
+     * @throws Exception
+     *             if the test fails
+     */
+    public void testBug25650385() throws Exception {
+
+        /*
+         * getByte (recommended for TINYINT):
+         * TINYINT, SMALLINT, INTEGER, BIGINT, REAL, FLOAT, DOUBLE, DECIMAL, NUMERIC, BIT, BOOLEAN, CHAR , VARCHAR , LONGVARCHAR, ROWID
+         */
+
+        createTable("testBug25650385", "(b1 blob(12), c1 char(12), c2 binary(12), i1 int, c3 char(12) CHARACTER SET binary)");
+        this.stmt.execute("INSERT INTO testBug25650385 values (10, 'a', 48, 10, 23)");
+
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.useSSL.getKeyName(), "false");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+        for (boolean useSSPS : new boolean[] { false, true }) {
+            for (boolean jdbcCompliantTruncation : new boolean[] { false, true }) {
+                props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), "" + useSSPS);
+                props.setProperty(PropertyKey.jdbcCompliantTruncation.getKeyName(), "" + jdbcCompliantTruncation);
+                Connection c1 = getConnectionWithProps(props);
+                this.pstmt = c1.prepareStatement("select * from testBug25650385");
+                if (useSSPS) {
+                    assertTrue(this.pstmt instanceof ServerPreparedStatement);
+                }
+                ResultSet rs1 = this.pstmt.executeQuery();
+                assertTrue(rs1.next());
+
+                // from blob(12)
+                assertEquals('1', rs1.getBytes(1)[0]);
+                if (jdbcCompliantTruncation) {
+                    assertThrows(SQLDataException.class, "Value '10' is outside of valid range for type java.lang.Byte", new Callable<Void>() {
+                        public Void call() throws Exception {
+                            rs1.getByte(1);
+                            return null;
+                        }
+                    });
+                } else {
+                    assertEquals('1', rs1.getByte(1));
+                }
+                assertEquals(10, rs1.getInt(1));
+                assertEquals(10L, rs1.getLong(1));
+                assertEquals(10, rs1.getShort(1));
+                assertEquals("10", rs1.getString(1));
+
+                // from c1 char(12)
+                assertEquals('a', rs1.getBytes(2)[0]);
+                assertEquals('a', rs1.getByte(2));
+                assertThrows(SQLDataException.class, "Cannot determine value type from string 'a'", new Callable<Void>() {
+                    public Void call() throws Exception {
+                        rs1.getInt(2);
+                        return null;
+                    }
+                });
+                assertThrows(SQLDataException.class, "Cannot determine value type from string 'a'", new Callable<Void>() {
+                    public Void call() throws Exception {
+                        rs1.getLong(2);
+                        return null;
+                    }
+                });
+                assertThrows(SQLDataException.class, "Cannot determine value type from string 'a'", new Callable<Void>() {
+                    public Void call() throws Exception {
+                        rs1.getShort(2);
+                        return null;
+                    }
+                });
+                assertEquals("a", rs1.getString(2));
+
+                // from c2 binary(12)
+                assertEquals('4', rs1.getBytes(3)[0]);
+                if (jdbcCompliantTruncation) {
+                    assertThrows(SQLDataException.class, "Value '48.+ is outside of valid range for type java.lang.Byte", new Callable<Void>() {
+                        public Void call() throws Exception {
+                            rs1.getByte(3);
+                            return null;
+                        }
+                    });
+                } else {
+                    assertEquals('4', rs1.getByte(3));
+                }
+                assertThrows(SQLDataException.class, "Cannot determine value type from string '48.+", new Callable<Void>() {
+                    public Void call() throws Exception {
+                        rs1.getInt(3);
+                        return null;
+                    }
+                });
+                assertThrows(SQLDataException.class, "Cannot determine value type from string '48.+", new Callable<Void>() {
+                    public Void call() throws Exception {
+                        rs1.getLong(3);
+                        return null;
+                    }
+                });
+                assertThrows(SQLDataException.class, "Cannot determine value type from string '48.+", new Callable<Void>() {
+                    public Void call() throws Exception {
+                        rs1.getShort(3);
+                        return null;
+                    }
+                });
+                assertTrue(rs1.getString(3).startsWith("48"));
+
+                // from i1 int
+                if (useSSPS) {
+                    assertEquals(10, rs1.getBytes(4)[0]);
+                } else {
+                    assertEquals('1', rs1.getBytes(4)[0]);
+                }
+                assertEquals(10, rs1.getByte(4));
+                assertEquals(10, rs1.getInt(4));
+                assertEquals(10, rs1.getLong(4));
+                assertEquals(10, rs1.getShort(4));
+                assertEquals("10", rs1.getString(4));
+
+                // from c3 char(12) CHARACTER SET binary
+                assertEquals('2', rs1.getBytes(5)[0]);
+                if (jdbcCompliantTruncation) {
+                    assertThrows(SQLDataException.class, "Value '23.+ is outside of valid range for type java.lang.Byte", new Callable<Void>() {
+                        public Void call() throws Exception {
+                            rs1.getByte(5);
+                            return null;
+                        }
+                    });
+                } else {
+                    assertEquals('2', rs1.getByte(5));
+                }
+                assertThrows(SQLDataException.class, "Cannot determine value type from string '23.+", new Callable<Void>() {
+                    public Void call() throws Exception {
+                        rs1.getInt(5);
+                        return null;
+                    }
+                });
+                assertThrows(SQLDataException.class, "Cannot determine value type from string '23.+", new Callable<Void>() {
+                    public Void call() throws Exception {
+                        rs1.getLong(5);
+                        return null;
+                    }
+                });
+                assertThrows(SQLDataException.class, "Cannot determine value type from string '23.+", new Callable<Void>() {
+                    public Void call() throws Exception {
+                        rs1.getShort(5);
+                        return null;
+                    }
+                });
+                assertTrue(rs1.getString(5).startsWith("23"));
+            }
+        }
+    }
+
+    /**
+     * Tests fix for BUG#27784363, MYSQL 8.0 JDBC DRIVER THROWS NUMBERFORMATEXCEPTION FOR TEXT DATA
+     *
+     * @throws Exception
+     *             if the test fails
+     */
+    public void testBug27784363() throws Exception {
+        createTable("testBug27784363", "(col0 TEXT)");
+
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.useSSL.getKeyName(), "false");
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
+        props.setProperty(PropertyKey.jdbcCompliantTruncation.getKeyName(), "false");
+        Connection c1 = getConnectionWithProps(props);
+        InputStream in1 = null;
+        try {
+            in1 = new ByteArrayInputStream(("gergeetbtebertbgergeetbtebertbgergeetbtebertbgergeetbtebertbgergeetbtebertbgergeetbtebertbge"
+                    + "rgeetbtebertbgergeetbtebertbgergeetbtebertbgergeetbtebertbrgeetbtebertbgergeetbtebertbgergeetbtebertbgergeetbtebertb").getBytes());
+            this.pstmt = c1.prepareStatement("insert into testBug27784363 values (?)");
+            this.pstmt.setAsciiStream(1, in1, in1.available());
+            this.pstmt.execute();
+            System.out.println("inserted.");
+            this.rs = c1.createStatement().executeQuery("select * from testBug27784363");
+            this.rs.next();
+            assertEquals('g', this.rs.getByte("col0"));
+        } finally {
+            in1.close();
+            c1.close();
+        }
+
     }
 }

@@ -1,24 +1,30 @@
 /*
-  Copyright (c) 2002, 2016, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2002, 2018, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite.regression;
@@ -33,10 +39,9 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.Properties;
 
-import com.mysql.cj.core.CharsetMapping;
-import com.mysql.cj.core.conf.PropertyDefinitions;
-import com.mysql.cj.core.util.Base64Decoder;
-import com.mysql.cj.core.util.StringUtils;
+import com.mysql.cj.conf.PropertyKey;
+import com.mysql.cj.util.Base64Decoder;
+import com.mysql.cj.util.StringUtils;
 
 import testsuite.BaseTestCase;
 
@@ -100,7 +105,7 @@ public class StringRegressionTest extends BaseTestCase {
      */
     public void testEncodingRegression() throws Exception {
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_characterEncoding, "UTF-8");
+        props.setProperty(PropertyKey.characterEncoding.getKeyName(), "UTF-8");
         DriverManager.getConnection(dbUrl, props).close();
     }
 
@@ -124,7 +129,7 @@ public class StringRegressionTest extends BaseTestCase {
         testString = new String(origByteStream, "SJIS");
 
         Properties connProps = new Properties();
-        connProps.setProperty(PropertyDefinitions.PNAME_characterEncoding, "sjis");
+        connProps.setProperty(PropertyKey.characterEncoding.getKeyName(), "sjis");
 
         Connection sjisConn = getConnectionWithProps(connProps);
         Statement sjisStmt = sjisConn.createStatement();
@@ -151,7 +156,7 @@ public class StringRegressionTest extends BaseTestCase {
 
     public void testGreekUtf8411() throws Exception {
         Properties newProps = new Properties();
-        newProps.setProperty(PropertyDefinitions.PNAME_characterEncoding, "UTF-8");
+        newProps.setProperty(PropertyKey.characterEncoding.getKeyName(), "UTF-8");
 
         Connection utf8Conn = this.getConnectionWithProps(newProps);
 
@@ -206,7 +211,7 @@ public class StringRegressionTest extends BaseTestCase {
 
         try {
             Properties props = new Properties();
-            props.setProperty(PropertyDefinitions.PNAME_characterEncoding, "cp1252");
+            props.setProperty(PropertyKey.characterEncoding.getKeyName(), "cp1252");
             latin1Conn = getConnectionWithProps(props);
 
             createTable("latin1RegressTest", "(stringField TEXT)");
@@ -215,12 +220,10 @@ public class StringRegressionTest extends BaseTestCase {
             pStmt.setString(1, latin1String);
             pStmt.executeUpdate();
 
-            ((com.mysql.cj.api.jdbc.JdbcConnection) latin1Conn).getPropertySet().<Boolean> getModifiableProperty(PropertyDefinitions.PNAME_traceProtocol)
-                    .setValue(true);
+            ((com.mysql.cj.jdbc.JdbcConnection) latin1Conn).getPropertySet().getProperty(PropertyKey.traceProtocol).setValue(true);
 
             this.rs = latin1Conn.createStatement().executeQuery("SELECT * FROM latin1RegressTest");
-            ((com.mysql.cj.api.jdbc.JdbcConnection) latin1Conn).getPropertySet().<Boolean> getModifiableProperty(PropertyDefinitions.PNAME_traceProtocol)
-                    .setValue(false);
+            ((com.mysql.cj.jdbc.JdbcConnection) latin1Conn).getPropertySet().getProperty(PropertyKey.traceProtocol).setValue(false);
 
             this.rs.next();
 
@@ -331,7 +334,7 @@ public class StringRegressionTest extends BaseTestCase {
 
         try {
             Properties props = new Properties();
-            props.setProperty(PropertyDefinitions.PNAME_characterEncoding, "SJIS");
+            props.setProperty(PropertyKey.characterEncoding.getKeyName(), "SJIS");
             sjisConn = getConnectionWithProps(props);
 
             sjisStmt = sjisConn.createStatement();
@@ -381,8 +384,8 @@ public class StringRegressionTest extends BaseTestCase {
      */
     public void testUtf8Encoding() throws Exception {
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_characterEncoding, "UTF8");
-        props.setProperty(PropertyDefinitions.PNAME_jdbcCompliantTruncation, "false");
+        props.setProperty(PropertyKey.characterEncoding.getKeyName(), "UTF8");
+        props.setProperty(PropertyKey.jdbcCompliantTruncation.getKeyName(), "false");
 
         Connection utfConn = DriverManager.getConnection(dbUrl, props);
         testConversionForString("UTF8", utfConn, "\u043c\u0438\u0445\u0438");
@@ -395,7 +398,7 @@ public class StringRegressionTest extends BaseTestCase {
         byte[] field2AsBytes = field2.getBytes("utf-8");
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_characterEncoding, "UTF8");
+        props.setProperty(PropertyKey.characterEncoding.getKeyName(), "UTF8");
 
         Connection utfConn = DriverManager.getConnection(dbUrl, props);
         Statement utfStmt = utfConn.createStatement();
@@ -543,8 +546,8 @@ public class StringRegressionTest extends BaseTestCase {
             System.setErr(newErr);
 
             Properties props = new Properties();
-            props.setProperty(PropertyDefinitions.PNAME_useSSL, "false");
-            props.setProperty(PropertyDefinitions.PNAME_characterEncoding, "utf8");
+            props.setProperty(PropertyKey.useSSL.getKeyName(), "false");
+            props.setProperty(PropertyKey.characterEncoding.getKeyName(), "utf8");
             getConnectionWithProps(props).close();
             System.setOut(oldOut);
             System.setErr(oldError);
@@ -579,7 +582,7 @@ public class StringRegressionTest extends BaseTestCase {
                 "(`id` INTEGER UNSIGNED NOT NULL AUTO_INCREMENT, `text` TEXT NOT NULL," + "PRIMARY KEY(`id`)) CHARACTER SET utf8 COLLATE utf8_general_ci");
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_characterEncoding, "utf8");
+        props.setProperty(PropertyKey.characterEncoding.getKeyName(), "utf8");
 
         Connection utf8Conn = null;
 
@@ -641,59 +644,13 @@ public class StringRegressionTest extends BaseTestCase {
         System.out.println(codePage1252);
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_characterEncoding, "Cp1252");
+        props.setProperty(PropertyKey.characterEncoding.getKeyName(), "Cp1252");
         Connection cp1252Conn = getConnectionWithProps(props);
         createTable("testCp1252", "(field1 varchar(32) CHARACTER SET latin1)");
         cp1252Conn.createStatement().executeUpdate("INSERT INTO testCp1252 VALUES ('" + codePage1252 + "')");
         this.rs = cp1252Conn.createStatement().executeQuery("SELECT field1 FROM testCp1252");
         this.rs.next();
         assertEquals(this.rs.getString(1), codePage1252);
-    }
-
-    /**
-     * Tests fix for BUG#23645 - Some collations/character sets reported as
-     * "unknown" (specifically cias variants of existing character sets), and
-     * inability to override the detected server character set.
-     * 
-     * @throws Exception
-     *             if the test fails.
-     */
-    public void testBug23645() throws Exception {
-        // Part of this isn't easily testable, hence the assertion in
-        // CharsetMapping
-        // that checks for mappings existing in both directions...
-
-        // What we test here is the ability to override the character
-        // mapping
-        // when the server returns an "unknown" character encoding.
-
-        String currentlyConfiguredCharacterSet = getSingleIndexedValueWithQuery(2, "SHOW VARIABLES LIKE 'character_set_connection'").toString();
-        System.out.println(currentlyConfiguredCharacterSet);
-
-        String javaNameForMysqlName = CharsetMapping.getJavaEncodingForMysqlCharset(currentlyConfiguredCharacterSet);
-        System.out.println(javaNameForMysqlName);
-
-        for (int i = 1; i < CharsetMapping.MAP_SIZE; i++) {
-            String possibleCharset = CharsetMapping.getJavaEncodingForCollationIndex(i);
-
-            if (!javaNameForMysqlName.equals(possibleCharset)) {
-                System.out.println(possibleCharset);
-
-                Properties props = new Properties();
-                props.setProperty(PropertyDefinitions.PNAME_characterEncoding, possibleCharset);
-                props.setProperty(PropertyDefinitions.PNAME_testsuite_faultInjection_serverCharsetIndex, "65535");
-
-                Connection forcedCharConn = null;
-
-                forcedCharConn = getConnectionWithProps(props);
-
-                String forcedCharset = getSingleIndexedValueWithQuery(forcedCharConn, 2, "SHOW VARIABLES LIKE 'character_set_connection'").toString();
-
-                System.out.println(forcedCharset);
-
-                break;
-            }
-        }
     }
 
     /**
@@ -705,7 +662,7 @@ public class StringRegressionTest extends BaseTestCase {
      */
     public void testBug24840() throws Exception {
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_characterEncoding, "US-ASCII");
+        props.setProperty(PropertyKey.characterEncoding.getKeyName(), "US-ASCII");
 
         getConnectionWithProps(props).close();
     }
@@ -740,31 +697,34 @@ public class StringRegressionTest extends BaseTestCase {
     }
 
     public void testBase64Decoder() throws Exception {
-        testBase64DecoderItem("TWFuIGlzIGRpc3Rpbmd1aXNoZWQsIG5vdCBvbmx5IGJ5IGhpcyByZWFzb24sIGJ1dCBieSB0\n"
-                + "aGlzIHNpbmd1bGFyIHBhc3Npb24gZnJvbSBvdGhlciBhbmltYWxzLCB3aGljaCBpcyBhIGx1\n"
-                + "c3Qgb2YgdGhlIG1pbmQsIHRoYXQgYnkgYSBwZXJzZXZlcmFuY2Ugb2YgZGVsaWdodCBpbiB0\n"
-                + "aGUgY29udGludWVkIGFuZCBpbmRlZmF0aWdhYmxlIGdlbmVyYXRpb24gb2Yga25vd2xlZGdl\n"
-                + "LCBleGNlZWRzIHRoZSBzaG9ydCB2ZWhlbWVuY2Ugb2YgYW55IGNhcm5hbCBwbGVhc3VyZS4=",
+        testBase64DecoderItem(
+                "TWFuIGlzIGRpc3Rpbmd1aXNoZWQsIG5vdCBvbmx5IGJ5IGhpcyByZWFzb24sIGJ1dCBieSB0\n"
+                        + "aGlzIHNpbmd1bGFyIHBhc3Npb24gZnJvbSBvdGhlciBhbmltYWxzLCB3aGljaCBpcyBhIGx1\n"
+                        + "c3Qgb2YgdGhlIG1pbmQsIHRoYXQgYnkgYSBwZXJzZXZlcmFuY2Ugb2YgZGVsaWdodCBpbiB0\n"
+                        + "aGUgY29udGludWVkIGFuZCBpbmRlZmF0aWdhYmxlIGdlbmVyYXRpb24gb2Yga25vd2xlZGdl\n"
+                        + "LCBleGNlZWRzIHRoZSBzaG9ydCB2ZWhlbWVuY2Ugb2YgYW55IGNhcm5hbCBwbGVhc3VyZS4=",
 
                 "Man is distinguished, not only by his reason, but by this singular passion"
                         + " from other animals, which is a lust of the mind, that by a perseverance of"
                         + " delight in the continued and indefatigable generation of knowledge, exceeds the short vehemence of any carnal pleasure.");
 
-        testBase64DecoderItem("TWFuIGlzIGRpc3Rpbmd1aXNoZWQsIG5vdCBvbmx5IGJ5IGhpcyByZWFzb24sIGJ1dCBieSB0\n"
-                + "aGlzIHNpbmd1bGFyIHBhc3Npb24gZnJvbSBvdGhlciBhbmltYWxzLCB3aGljaCBpcyBhIGx1\n"
-                + "c3Qgb2YgdGhlIG1pbmQsIHRoYXQgYnkgYSBwZXJzZXZlcmFuY2Ugb2YgZGVsaWdodCBpbiB0\n"
-                + "aGUgY29udGludWVkIGFuZCBpbmRlZmF0aWdhYmxlIGdlbmVyYXRpb24gb2Yga25vd2xlZGdl\n"
-                + "LCBleGNlZWRzIHRoZSBzaG9ydCB2ZWhlbWVuY2Ugb2YgYW55IGNhcm5hbCBwbGVhc3VyZQ==",
+        testBase64DecoderItem(
+                "TWFuIGlzIGRpc3Rpbmd1aXNoZWQsIG5vdCBvbmx5IGJ5IGhpcyByZWFzb24sIGJ1dCBieSB0\n"
+                        + "aGlzIHNpbmd1bGFyIHBhc3Npb24gZnJvbSBvdGhlciBhbmltYWxzLCB3aGljaCBpcyBhIGx1\n"
+                        + "c3Qgb2YgdGhlIG1pbmQsIHRoYXQgYnkgYSBwZXJzZXZlcmFuY2Ugb2YgZGVsaWdodCBpbiB0\n"
+                        + "aGUgY29udGludWVkIGFuZCBpbmRlZmF0aWdhYmxlIGdlbmVyYXRpb24gb2Yga25vd2xlZGdl\n"
+                        + "LCBleGNlZWRzIHRoZSBzaG9ydCB2ZWhlbWVuY2Ugb2YgYW55IGNhcm5hbCBwbGVhc3VyZQ==",
 
                 "Man is distinguished, not only by his reason, but by this singular passion"
                         + " from other animals, which is a lust of the mind, that by a perseverance of"
                         + " delight in the continued and indefatigable generation of knowledge, exceeds the short vehemence of any carnal pleasure");
 
-        testBase64DecoderItem("TWFuIGlzIGRpc3Rpbmd1aXNoZWQsIG5vdCBvbmx5IGJ5IGhpcyByZWFzb24sIGJ1dCBieSB0\n"
-                + "aGlzIHNpbmd1bGFyIHBhc3Npb24gZnJvbSBvdGhlciBhbmltYWxzLCB3aGljaCBpcyBhIGx1\n"
-                + "c3Qgb2YgdGhlIG1pbmQsIHRoYXQgYnkgYSBwZXJzZXZlcmFuY2Ugb2YgZGVsaWdodCBpbiB0\n"
-                + "aGUgY29udGludWVkIGFuZCBpbmRlZmF0aWdhYmxlIGdlbmVyYXRpb24gb2Yga25vd2xlZGdl\n"
-                + "LCBleGNlZWRzIHRoZSBzaG9ydCB2ZWhlbWVuY2Ugb2YgYW55IGNhcm5hbCBwbGVhc3Vy",
+        testBase64DecoderItem(
+                "TWFuIGlzIGRpc3Rpbmd1aXNoZWQsIG5vdCBvbmx5IGJ5IGhpcyByZWFzb24sIGJ1dCBieSB0\n"
+                        + "aGlzIHNpbmd1bGFyIHBhc3Npb24gZnJvbSBvdGhlciBhbmltYWxzLCB3aGljaCBpcyBhIGx1\n"
+                        + "c3Qgb2YgdGhlIG1pbmQsIHRoYXQgYnkgYSBwZXJzZXZlcmFuY2Ugb2YgZGVsaWdodCBpbiB0\n"
+                        + "aGUgY29udGludWVkIGFuZCBpbmRlZmF0aWdhYmxlIGdlbmVyYXRpb24gb2Yga25vd2xlZGdl\n"
+                        + "LCBleGNlZWRzIHRoZSBzaG9ydCB2ZWhlbWVuY2Ugb2YgYW55IGNhcm5hbCBwbGVhc3Vy",
 
                 "Man is distinguished, not only by his reason, but by this singular passion"
                         + " from other animals, which is a lust of the mind, that by a perseverance of"

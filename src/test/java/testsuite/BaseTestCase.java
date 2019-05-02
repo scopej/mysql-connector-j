@@ -1,29 +1,35 @@
 /*
-  Copyright (c) 2002, 2017, Oracle and/or its affiliates. All rights reserved.
-
-  The MySQL Connector/J is licensed under the terms of the GPLv2
-  <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most MySQL Connectors.
-  There are special exceptions to the terms and conditions of the GPLv2 as it is applied to
-  this software, see the FOSS License Exception
-  <http://www.mysql.com/about/legal/licensing/foss-exception.html>.
-
-  This program is free software; you can redistribute it and/or modify it under the terms
-  of the GNU General Public License as published by the Free Software Foundation; version 2
-  of the License.
-
-  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
-  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-  See the GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License along with this
-  program; if not, write to the Free Software Foundation, Inc., 51 Franklin St, Fifth
-  Floor, Boston, MA 02110-1301  USA
-
+ * Copyright (c) 2002, 2018, Oracle and/or its affiliates. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License, version 2.0, as published by the
+ * Free Software Foundation.
+ *
+ * This program is also distributed with certain software (including but not
+ * limited to OpenSSL) that is licensed under separate terms, as designated in a
+ * particular file or component or in included license documentation. The
+ * authors of MySQL hereby grant you an additional permission to link the
+ * program and your derivative works with the separately licensed software that
+ * they have included with MySQL.
+ *
+ * Without limiting anything contained in the foregoing, this file, which is
+ * part of MySQL Connector/J, is also subject to the Universal FOSS Exception,
+ * version 1.0, a copy of which can be found at
+ * http://oss.oracle.com/licenses/universal-foss-exception.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License, version 2.0,
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
 package testsuite;
 
-import static com.mysql.cj.core.util.StringUtils.isNullOrEmpty;
+import static com.mysql.cj.util.StringUtils.isNullOrEmpty;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -38,6 +44,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -46,16 +53,17 @@ import java.util.Set;
 import java.util.StringJoiner;
 import java.util.concurrent.Callable;
 
-import com.mysql.cj.api.jdbc.JdbcConnection;
-import com.mysql.cj.api.jdbc.ha.ReplicationConnection;
-import com.mysql.cj.core.ServerVersion;
-import com.mysql.cj.core.conf.PropertyDefinitions;
-import com.mysql.cj.core.conf.url.ConnectionUrl;
-import com.mysql.cj.core.conf.url.ConnectionUrlParser;
-import com.mysql.cj.core.conf.url.HostInfo;
-import com.mysql.cj.core.util.StringUtils;
-import com.mysql.cj.core.util.Util;
+import com.mysql.cj.ServerVersion;
+import com.mysql.cj.conf.ConnectionUrl;
+import com.mysql.cj.conf.ConnectionUrlParser;
+import com.mysql.cj.conf.HostInfo;
+import com.mysql.cj.conf.PropertyDefinitions;
+import com.mysql.cj.conf.PropertyKey;
+import com.mysql.cj.jdbc.JdbcConnection;
 import com.mysql.cj.jdbc.NonRegisteringDriver;
+import com.mysql.cj.jdbc.ha.ReplicationConnection;
+import com.mysql.cj.util.StringUtils;
+import com.mysql.cj.util.Util;
 
 import junit.framework.TestCase;
 
@@ -385,7 +393,7 @@ public abstract class BaseTestCase extends TestCase {
     protected Connection getNewSha256Connection() throws SQLException {
         if (sha256Url != null) {
             Properties props = new Properties();
-            props.setProperty(PropertyDefinitions.PNAME_allowPublicKeyRetrieval, "true");
+            props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
             return DriverManager.getConnection(sha256Url, props);
         }
         return null;
@@ -437,7 +445,11 @@ public abstract class BaseTestCase extends TestCase {
      *             if parsing fails
      */
     protected Properties getPropertiesFromTestsuiteUrl() throws SQLException {
-        return mainConnectionUrl.getMainHost().exposeAsProperties();
+        return getPropertiesFromUrl(mainConnectionUrl);
+    }
+
+    protected Properties getPropertiesFromUrl(ConnectionUrl url) throws SQLException {
+        return url.getMainHost().exposeAsProperties();
     }
 
     protected Properties getHostFreePropertiesFromTestsuiteUrl() throws SQLException {
@@ -454,8 +466,32 @@ public abstract class BaseTestCase extends TestCase {
     }
 
     protected void removeHostRelatedProps(Properties props) {
-        props.remove(PropertyDefinitions.HOST_PROPERTY_KEY);
-        props.remove(PropertyDefinitions.PORT_PROPERTY_KEY);
+        props.remove(PropertyKey.HOST.getKeyName());
+        props.remove(PropertyKey.PORT.getKeyName());
+    }
+
+    /**
+     * Some tests build connections strings for internal usage but, in order for them to work, they may require some connection properties set in the main test
+     * suite URL. For example 'serverTimezone' is one of those properties.
+     * 
+     * @param props
+     *            the Properties object where to add the missing connection properties
+     * @return
+     *         the modified Properties objects or a new one if <code>props</code> is <code>null</code>
+     */
+    protected Properties appendRequiredProperties(Properties props) {
+        if (props == null) {
+            props = new Properties();
+        }
+
+        // Add 'serverTimezone' if set in test suite URL and missing from props.
+        String propKey = PropertyKey.serverTimezone.getKeyName();
+        String origTzValue = null;
+        if (!props.containsKey(propKey) && (origTzValue = mainConnectionUrl.getOriginalProperties().get(propKey)) != null) {
+            props.setProperty(propKey, origTzValue);
+        }
+
+        return props;
     }
 
     protected String getHostFromTestsuiteUrl() throws SQLException {
@@ -476,6 +512,28 @@ public abstract class BaseTestCase extends TestCase {
         String hostPortPair = mainConnectionUrl.getMainHost().getHostPortPair();
         hostPortPair = TestUtils.encodePercent(hostPortPair);
         return hostPortPair;
+    }
+
+    protected String getNoDbUrl(String url) throws SQLException {
+        Properties props = getPropertiesFromUrl(ConnectionUrl.getConnectionUrlInstance(url, null));
+        final String host = props.getProperty(PropertyKey.HOST.getKeyName(), "localhost");
+        final String port = props.getProperty(PropertyKey.PORT.getKeyName(), "3306");
+        props.remove(PropertyKey.DBNAME.getKeyName());
+        removeHostRelatedProps(props);
+
+        final StringBuilder urlBuilder = new StringBuilder("jdbc:mysql://").append(host).append(":").append(port).append("/?");
+
+        Enumeration<Object> keyEnum = props.keys();
+        while (keyEnum.hasMoreElements()) {
+            String key = (String) keyEnum.nextElement();
+            urlBuilder.append(key);
+            urlBuilder.append("=");
+            urlBuilder.append(props.get(key));
+            if (keyEnum.hasMoreElements()) {
+                urlBuilder.append("&");
+            }
+        }
+        return urlBuilder.toString();
     }
 
     protected int getRowCount(String tableName) throws SQLException {
@@ -594,19 +652,19 @@ public abstract class BaseTestCase extends TestCase {
      */
     @Override
     public void setUp() throws Exception {
+        System.out.println("Running test " + getClass().getName() + "#" + getName());
+        System.out.println("################################################################################");
         Class.forName(this.dbClass).newInstance();
         this.createdObjects = new ArrayList<>();
 
         Properties props = new Properties();
-        props.setProperty(PropertyDefinitions.PNAME_useSSL, "false"); // testsuite is built upon non-SSL default connection
+        props.setProperty(PropertyKey.useSSL.getKeyName(), "false"); // testsuite is built upon non-SSL default connection
+        props.setProperty(PropertyKey.allowPublicKeyRetrieval.getKeyName(), "true");
         this.conn = DriverManager.getConnection(dbUrl, props);
 
-        props.setProperty(PropertyDefinitions.PNAME_allowPublicKeyRetrieval, "true");
         this.sha256Conn = sha256Url == null ? null : DriverManager.getConnection(sha256Url, props);
 
         this.serverVersion = ((JdbcConnection) this.conn).getServerVersion();
-
-        System.out.println("Done.\n");
 
         this.stmt = this.conn.createStatement();
 
@@ -1020,13 +1078,13 @@ public abstract class BaseTestCase extends TestCase {
     }
 
     protected Connection getMasterSlaveReplicationConnection(Properties props) throws SQLException {
-        String replicationUrl = getMasterSlaveUrl(ConnectionUrl.Type.REPLICATION_CONNECTION.getProtocol());
+        String replicationUrl = getMasterSlaveUrl(ConnectionUrl.Type.REPLICATION_CONNECTION.getScheme());
         Connection replConn = new NonRegisteringDriver().connect(replicationUrl, getHostFreePropertiesFromTestsuiteUrl(props));
         return replConn;
     }
 
     protected String getMasterSlaveUrl() throws SQLException {
-        return getMasterSlaveUrl(ConnectionUrl.Type.FAILOVER_CONNECTION.getProtocol());
+        return getMasterSlaveUrl(ConnectionUrl.Type.FAILOVER_CONNECTION.getScheme());
     }
 
     protected String getMasterSlaveUrl(String protocol) throws SQLException {
@@ -1060,7 +1118,7 @@ public abstract class BaseTestCase extends TestCase {
             hostsString.add(getEncodedHostPortPairFromTestsuiteUrl());
         }
 
-        Connection lbConn = DriverManager.getConnection(ConnectionUrl.Type.LOADBALANCE_CONNECTION.getProtocol() + "//" + hostsString, urlProps);
+        Connection lbConn = DriverManager.getConnection(ConnectionUrl.Type.LOADBALANCE_CONNECTION.getScheme() + "//" + hostsString, urlProps);
         return lbConn;
     }
 
@@ -1074,7 +1132,7 @@ public abstract class BaseTestCase extends TestCase {
 
     protected String getPort(Properties props) throws SQLException {
         String port;
-        if (props == null || (port = props.getProperty(PropertyDefinitions.PORT_PROPERTY_KEY)) == null) {
+        if (props == null || (port = props.getProperty(PropertyKey.PORT.getKeyName())) == null) {
             return String.valueOf(mainConnectionUrl.getMainHost().getPort());
         }
         return port;
@@ -1082,7 +1140,7 @@ public abstract class BaseTestCase extends TestCase {
 
     protected String getPortFreeHostname(Properties props) throws SQLException {
         String host;
-        if (props == null || (host = props.getProperty(PropertyDefinitions.HOST_PROPERTY_KEY)) == null) {
+        if (props == null || (host = props.getProperty(PropertyKey.HOST.getKeyName())) == null) {
             return mainConnectionUrl.getMainHost().getHost();
         }
         return ConnectionUrlParser.parseHostPortPair(host).left;
@@ -1094,7 +1152,7 @@ public abstract class BaseTestCase extends TestCase {
         }
 
         props = getHostFreePropertiesFromTestsuiteUrl(props);
-        props.setProperty(PropertyDefinitions.PNAME_socketFactory, "testsuite.UnreliableSocketFactory");
+        props.setProperty(PropertyKey.socketFactory.getKeyName(), "testsuite.UnreliableSocketFactory");
 
         HostInfo defaultHost = mainConnectionUrl.getMainHost();
         String db = defaultHost.getDatabase();
@@ -1122,7 +1180,7 @@ public abstract class BaseTestCase extends TestCase {
             haMode += ":";
         }
 
-        return getConnectionWithProps(ConnectionUrl.Type.FAILOVER_CONNECTION.getProtocol() + haMode + "//" + hostString.toString() + "/" + db, props);
+        return getConnectionWithProps(ConnectionUrl.Type.FAILOVER_CONNECTION.getScheme() + haMode + "//" + hostString.toString() + "/" + db, props);
     }
 
     protected Connection getUnreliableFailoverConnection(String[] hostNames, Properties props) throws Exception {
@@ -1178,7 +1236,7 @@ public abstract class BaseTestCase extends TestCase {
 
     protected ReplicationConnection getUnreliableReplicationConnection(Set<MockConnectionConfiguration> configs, Properties props) throws Exception {
         props = getHostFreePropertiesFromTestsuiteUrl(props);
-        props.setProperty(PropertyDefinitions.PNAME_socketFactory, "testsuite.UnreliableSocketFactory");
+        props.setProperty(PropertyKey.socketFactory.getKeyName(), "testsuite.UnreliableSocketFactory");
 
         HostInfo defaultHost = mainConnectionUrl.getMainHost();
         String db = defaultHost.getDatabase();
@@ -1202,7 +1260,7 @@ public abstract class BaseTestCase extends TestCase {
             }
         }
 
-        return (ReplicationConnection) getConnectionWithProps(ConnectionUrl.Type.REPLICATION_CONNECTION.getProtocol() + "//" + hostString.toString() + "/" + db,
+        return (ReplicationConnection) getConnectionWithProps(ConnectionUrl.Type.REPLICATION_CONNECTION.getScheme() + "//" + hostString.toString() + "/" + db,
                 props);
     }
 
